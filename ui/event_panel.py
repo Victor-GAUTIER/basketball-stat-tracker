@@ -25,10 +25,37 @@ class EventPanel(QWidget):
 
         grid = QGridLayout()
         cols = 3
+        shortcuts = {
+            "2PTS_MADE": "A",
+            "2PTS_MISS": "Z",
+            "3PTS_MADE": "E",
+            "3PTS_MISS": "R",
+            "REBOND_OFF": "Q",
+            "REBOND_DEF": "S",
+            "PASSE_DEC": "D",
+            "PERTE_BALLE": "F",
+            "FAUTE": "G",
+        }
+
+
         for i, event in enumerate(EVENTS):
-            button = QPushButton(event)
-            button.clicked.connect(lambda checked=False, e=event: self.event_triggered.emit(e))
-            grid.addWidget(button, i // cols, i % cols)
+
+            button = QPushButton(
+                f"{event} ({shortcuts[event]})"
+            )
+
+            button.clicked.connect(
+                lambda checked=False, e=event:
+                self.event_triggered.emit(e)
+            )
+
+            button.setShortcut(shortcuts[event])
+
+            grid.addWidget(
+                button,
+                i // cols,
+                i % cols
+            )
 
         layout = QVBoxLayout()
         layout.addWidget(QLabel("Événements enregistrés :"))
