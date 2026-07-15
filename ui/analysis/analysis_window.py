@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import List
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QKeySequence, QShortcut
+from PySide6.QtGui import QKeySequence, QShortcut, QAction
 from PySide6.QtWidgets import (
     QFileDialog,
     QHBoxLayout,
@@ -13,7 +13,6 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QPushButton,
-    QComboBox,
     QSplitter,
     QStatusBar,
     QTabWidget,
@@ -33,6 +32,7 @@ from ui.analysis.player_panel import PlayerPanel
 from ui.analysis.event_panel import EventPanel, EVENT_TYPES
 from ui.analysis.recent_events_panel import RecentEventsPanel
 from ui.analysis.stats_panel import StatsPanel
+from ui.launch_window import LaunchWindow
 
 
 
@@ -41,13 +41,15 @@ class AnalysisWindow(QMainWindow):
     def __init__(
         self,
         database: Database,
-        game_id: int
+        game_id: int,
+        launch_window=None
     ):
 
         super().__init__()
 
 
         self.database = database
+        self.launch_window = launch_window
 
         self.controller = AnalysisController(
             database,
@@ -76,6 +78,8 @@ class AnalysisWindow(QMainWindow):
 
 
         self._build_ui()
+
+        self._create_menu()
 
         self._register_shortcuts()
 
@@ -202,44 +206,6 @@ class AnalysisWindow(QMainWindow):
 
 
 
-        quarter_layout = QHBoxLayout()
-
-
-        quarter_layout.addWidget(
-            QLabel(
-                "Quart-temps :"
-            )
-        )
-
-
-        self.quarter_combo = QComboBox()
-
-
-        self.quarter_combo.addItems(
-            [
-                "1",
-                "2",
-                "3",
-                "4",
-                "Prolongation"
-            ]
-        )
-
-
-        self.quarter_combo.currentIndexChanged.connect(
-            self._on_quarter_changed
-        )
-
-
-        quarter_layout.addWidget(
-            self.quarter_combo
-        )
-
-
-        quarter_layout.addStretch()
-
-
-
         self.event_panel = EventPanel(
             self
         )
@@ -291,10 +257,6 @@ class AnalysisWindow(QMainWindow):
             self.selected_player_label
         )
 
-
-        right_layout.addLayout(
-            quarter_layout
-        )
 
 
         right_layout.addWidget(
@@ -380,7 +342,121 @@ class AnalysisWindow(QMainWindow):
             self._on_event_triggered
         )
 
+    # =====================================================
+    # Menu
+    # =====================================================
 
+    def _create_menu(self):
+
+        menu_bar = self.menuBar()
+
+
+        options_menu = menu_bar.addMenu(
+            "Options"
+        )
+
+
+        # -------------------------
+        # Changer quart-temps
+        # -------------------------
+
+        quarter_menu = options_menu.addMenu(
+            "Changer de quart-temps"
+        )
+
+
+        quarters = [
+            ("Quart-temps 1", 1),
+            ("Quart-temps 2", 2),
+            ("Quart-temps 3", 3),
+            ("Quart-temps 4", 4),
+            ("Prolongation", 5),
+        ]
+
+
+        for text, value in quarters:
+
+            action = QAction(
+                text,
+                self
+            )
+
+
+            action.triggered.connect(
+                lambda checked=False, q=value:
+                self._change_quarter(q)
+            )
+
+
+            quarter_menu.addAction(
+                action
+            )
+
+
+
+        # -------------------------
+        # Changer de match
+        # -------------------------
+
+        change_game = QAction(
+            "Changer de match",
+            self
+        )
+
+
+        change_game.triggered.connect(
+            self._change_game
+        )
+
+
+        options_menu.addAction(
+            change_game
+        )
+
+
+
+    def _change_quarter(
+        self,
+        quarter: int
+    ):
+
+        self.controller.set_quarter(
+            quarter
+        )
+
+
+        self.quarter_combo.setCurrentIndex(
+            quarter - 1
+        )
+
+
+        self.statusBar().showMessage(
+            f"Quart-temps {quarter}",
+            3000
+        )
+
+
+
+    def _change_game(self):
+
+        reply = QMessageBox.question(
+            self,
+            "Changer de match",
+            "Retourner à la sélection des matchs ?"
+        )
+
+
+        if reply == QMessageBox.StandardButton.Yes:
+
+            if self.launch_window:
+
+                self.launch_window.show()
+                self.launch_window.raise_()
+                self.launch_window.activateWindow()
+                self.launch_window._load_games()
+
+
+            self.close()
 
     # =====================================================
     # Raccourcis clavier

@@ -27,8 +27,7 @@ CREATE TABLE IF NOT EXISTS players (
     team_id INTEGER NOT NULL,
     name    TEXT NOT NULL,
     number  INTEGER NOT NULL,
-    FOREIGN KEY (team_id) REFERENCES teams (id) ON DELETE CASCADE,
-    UNIQUE (team_id, number)
+    FOREIGN KEY (team_id) REFERENCES teams (id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS games (
@@ -166,6 +165,25 @@ class Database:
         if r is None:
             return None
         return Player(id=r["id"], team_id=r["team_id"], name=r["name"], number=r["number"])
+
+    def update_player(
+        self,
+        player_id: int,
+        name: str,
+        number: int
+    ) -> None:
+        """Modifie le nom et le numéro d'une joueuse."""
+
+        self.connection.execute(
+            """
+            UPDATE players
+            SET name = ?, number = ?
+            WHERE id = ?
+            """,
+            (name, number, player_id)
+        )
+
+        self.connection.commit()
 
     # ------------------------------------------------------------------
     # Matchs

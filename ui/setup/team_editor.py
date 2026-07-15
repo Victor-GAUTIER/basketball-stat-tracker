@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QVBoxLayout,
     QWidget,
+    QMenu,
 )
 
 from data.database import Database
@@ -55,6 +56,13 @@ class TeamEditor(QGroupBox):
 
         self.player_list = QListWidget(self)
         self.player_list.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.player_list.setContextMenuPolicy(
+            Qt.ContextMenuPolicy.CustomContextMenu
+        )
+
+        self.player_list.customContextMenuRequested.connect(
+            self._show_player_context_menu
+        )
 
         self.add_player_button = QPushButton("Ajouter un joueur", self)
         self.remove_player_button = QPushButton("Retirer le joueur", self)
@@ -99,6 +107,71 @@ class TeamEditor(QGroupBox):
             player = dialog.get_player()
             if player is not None:
                 self._add_player_entry(player)
+
+    def _show_player_context_menu(self, position) -> None:
+        item = self.player_list.itemAt(position)
+
+        if item is None:
+            return
+
+        menu = QMenu(self)
+
+        edit_action = menu.addAction("Modifier")
+
+        remove_action = menu.addAction("Supprimer")
+
+
+        action = menu.exec(
+            self.player_list.mapToGlobal(position)
+        )
+
+
+        if action == edit_action:
+            self._on_edit_player()
+
+        elif action == remove_action:
+            self._on_remove_player()
+
+    def _on_edit_player(self) -> None:
+        row = self.player_list.currentRow()
+
+        if row < 0:
+            return
+
+        item = self.player_list.item(row)
+
+        old_player = item.data(
+            Qt.ItemDataRole.UserRole
+        )
+
+
+        dialog = PlayerEditorDialog(
+            self,
+            player=old_player
+        )
+
+
+        if dialog.exec() != PlayerEditorDialog.DialogCode.Accepted:
+            return
+
+
+        new_player = dialog.get_player()
+
+        if new_player is None:
+            return
+
+
+        self._players[row] = new_player
+
+
+        item.setText(
+            f"#{new_player[1]}  {new_player[0]}"
+        )
+
+        item.setData(
+            Qt.ItemDataRole.UserRole,
+            new_player
+        )
 
     def _add_player_entry(self, player: Tuple[str, int]) -> None:
         name, number = player

@@ -1,4 +1,4 @@
-"""Boîte de dialogue permettant de saisir un nouveau joueur (nom + numéro)."""
+"""Boîte de dialogue permettant d'ajouter ou modifier une joueuse."""
 
 from __future__ import annotations
 
@@ -15,40 +15,96 @@ from PySide6.QtWidgets import (
 
 
 class PlayerEditorDialog(QDialog):
-    """Formulaire modal pour ajouter un joueur à une équipe."""
+    """Formulaire modal pour ajouter ou modifier une joueuse."""
 
-    def __init__(self, parent: Optional[QWidget] = None) -> None:
+    def __init__(
+        self,
+        parent: Optional[QWidget] = None,
+        player: Optional[Tuple[str, int]] = None,
+    ) -> None:
+
         super().__init__(parent)
-        self.setWindowTitle("Ajouter un joueur")
+
         self.setMinimumWidth(280)
 
+
+        if player is None:
+            self.setWindowTitle("Ajouter une joueuse")
+        else:
+            self.setWindowTitle("Modifier la joueuse")
+
+
         self.name_edit = QLineEdit(self)
-        self.name_edit.setPlaceholderText("Nom du joueur")
+        self.name_edit.setPlaceholderText("Nom de la joueuse")
+
 
         self.number_spin = QSpinBox(self)
         self.number_spin.setRange(0, 99)
 
+
+        # Si on modifie une joueuse existante,
+        # on recharge ses informations
+        if player is not None:
+            name, number = player
+            self.name_edit.setText(name)
+            self.number_spin.setValue(number)
+
+
         form = QFormLayout()
-        form.addRow("Nom :", self.name_edit)
-        form.addRow("Numéro :", self.number_spin)
+
+        form.addRow(
+            "Nom :",
+            self.name_edit
+        )
+
+        form.addRow(
+            "Numéro :",
+            self.number_spin
+        )
+
 
         buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+            QDialogButtonBox.StandardButton.Ok
+            |
+            QDialogButtonBox.StandardButton.Cancel
         )
-        buttons.accepted.connect(self._on_accept)
-        buttons.rejected.connect(self.reject)
 
-        form.addRow(buttons)
-        self.setLayout(form)
+
+        buttons.accepted.connect(
+            self._on_accept
+        )
+
+        buttons.rejected.connect(
+            self.reject
+        )
+
+
+        form.addRow(
+            buttons
+        )
+
+
+        self.setLayout(
+            form
+        )
+
 
     def _on_accept(self) -> None:
-        # On ne valide que si un nom a été saisi.
+        """Valide uniquement si un nom existe."""
+
         if self.name_edit.text().strip():
             self.accept()
 
+
     def get_player(self) -> Optional[Tuple[str, int]]:
-        """Retourne (nom, numéro) si le formulaire est valide, sinon None."""
+        """Retourne (nom, numéro)."""
+
         name = self.name_edit.text().strip()
+
         if not name:
             return None
-        return name, self.number_spin.value()
+
+        return (
+            name,
+            self.number_spin.value()
+        )
