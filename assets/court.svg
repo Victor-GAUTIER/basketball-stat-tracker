@@ -1,0 +1,412 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Generator: Adobe Illustrator 27.5.0, SVG Export Plug-In . SVG Version: 6.00 Build 0)  -->
+
+<svg:svg
+   version="1.1"
+   id="Layer_1"
+   x="0px"
+   y="0px"
+   viewBox="0 0 541.42 909.92"
+   style="enable-background:new 0 0 541.42 909.92;"
+   xml:space="preserve"
+   sodipodi:docname="Basketball_court_fiba_2024.svg"
+   inkscape:version="1.2.2 (b0a8486541, 2022-12-01)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns:svg="http://www.w3.org/2000/svg"><svg:defs
+   id="defs1702" /><sodipodi:namedview
+   id="namedview1700"
+   pagecolor="#505050"
+   bordercolor="#eeeeee"
+   borderopacity="1"
+   inkscape:showpageshadow="0"
+   inkscape:pageopacity="0"
+   inkscape:pagecheckerboard="0"
+   inkscape:deskcolor="#505050"
+   showgrid="false"
+   showguides="true"
+   inkscape:zoom="2"
+   inkscape:cx="275.75"
+   inkscape:cy="360.75"
+   inkscape:window-width="2560"
+   inkscape:window-height="1360"
+   inkscape:window-x="0"
+   inkscape:window-y="0"
+   inkscape:window-maximized="1"
+   inkscape:current-layer="g1697" />
+<svg:style
+   type="text/css"
+   id="style1593">
+	.st0{fill:#C2B59B;}
+	.st1{fill:#58595B;}
+	.st2{fill:#FFFFFF;}
+</svg:style>
+<svg:g
+   id="g1697">
+	<svg:g
+   id="Floor_Markings"
+   style="display:inline">
+		<svg:rect
+   x="28.35"
+   y="28.35"
+   class="st0"
+   width="484.72"
+   height="853.22998"
+   id="rect1595"
+   style="fill:#ffccaa;fill-opacity:1" />
+		<svg:path
+   class="st1"
+   d="M 484.72,56.69 V 853.23 H 56.69 V 56.69 H 484.72 M 541.42,0 H 0 v 909.92 h 541.42 z"
+   id="path1597"
+   style="fill:#333333" />
+	</svg:g>
+	<svg:g
+   id="Court_Markings">
+		<svg:g
+   id="Boundary_Line_and_Centre_Line">
+			<svg:g
+   id="Boundary_Line">
+				<svg:rect
+   x="56.74"
+   y="58.11"
+   class="st2"
+   width="1.42"
+   height="794.36"
+   id="rect1600" />
+				<svg:rect
+   x="483.31"
+   y="58.11"
+   class="st2"
+   width="1.42"
+   height="794.36"
+   id="rect1602" />
+				<svg:rect
+   x="56.74"
+   y="56.69"
+   class="st2"
+   width="427.99"
+   height="1.42"
+   id="rect1604" />
+				<svg:rect
+   x="56.74"
+   y="852.48"
+   class="st2"
+   width="427.99"
+   height="1.42"
+   id="rect1606" />
+			</svg:g>
+			<svg:rect
+   x="52.53"
+   y="454.59"
+   class="st2"
+   width="436.41"
+   height="1.41"
+   id="rect1609" />
+			<svg:path
+   id="Centre_Circle_00000070833358215776187290000005064515555768438672_"
+   class="st2"
+   d="M270.73,405.65     c27.35,0,49.6,22.27,49.6,49.65s-22.25,49.65-49.6,49.65c-27.35,0-49.6-22.27-49.6-49.65S243.38,405.65,270.73,405.65      M270.73,404.23c-28.18,0-51.02,22.86-51.02,51.07s22.84,51.07,51.02,51.07s51.02-22.86,51.02-51.07S298.91,404.23,270.73,404.23     L270.73,404.23z" />
+		</svg:g>
+		<svg:g
+   id="_x33__Point_Line">
+			<svg:rect
+   x="83.7"
+   y="767.3"
+   class="st2"
+   width="1.42"
+   height="85.18"
+   id="rect1613" />
+			<svg:rect
+   x="456.38"
+   y="767.43"
+   class="st2"
+   width="1.42"
+   height="85.04"
+   id="rect1615" />
+			<svg:path
+   class="st2"
+   d="M457.8,767.44l-1.41,0.1h-0.01c-2.47-11.52-6.04-22.79-10.67-33.74c-9.56-22.63-23.26-42.96-40.7-60.42     c-17.44-17.45-37.75-31.16-60.36-40.73c-23.41-9.91-48.28-14.93-73.91-14.93c-25.64,0-50.51,5.02-73.92,14.93     c-22.61,9.58-42.92,23.28-60.36,40.73c-17.44,17.46-31.13,37.79-40.7,60.42c-4.61,10.91-8.16,22.13-10.63,33.6h-0.01l-1.41-0.09     c18.56-86.32,95.24-151.02,187.03-151.02C362.57,616.29,439.29,681.06,457.8,767.44z"
+   id="path1617" />
+		</svg:g>
+		<svg:g
+   id="Key">
+			<svg:g
+   id="Key_Base">
+				<svg:path
+   class="st2"
+   d="M338.76,689.35v163.13H202.71V689.35H338.76 M340.18,687.93H201.29v165.97h138.89V687.93L340.18,687.93z"
+   id="path1620" />
+				<svg:path
+   class="st2"
+   d="M321.74,687.93h-1.41c-0.37-27.05-22.48-48.94-49.6-48.94c-27.12,0-49.23,21.89-49.6,48.94h-1.41      c0.37-27.87,23.06-50.36,51.01-50.36C298.68,637.57,321.37,660.05,321.74,687.93z"
+   id="path1622" />
+			</svg:g>
+			<svg:g
+   id="Rebound_Places">
+				<svg:rect
+   x="340.18"
+   y="801.41"
+   class="st2"
+   width="2.83"
+   height="1.42"
+   id="rect1625" />
+				<svg:rect
+   x="340.18"
+   y="765.94"
+   class="st2"
+   width="2.83"
+   height="11.35"
+   id="rect1627" />
+				<svg:rect
+   x="340.18"
+   y="740.41"
+   class="st2"
+   width="2.83"
+   height="1.42"
+   id="rect1629" />
+				<svg:rect
+   x="340.18"
+   y="714.88"
+   class="st2"
+   width="2.83"
+   height="1.42"
+   id="rect1631" />
+				<svg:rect
+   x="198.46"
+   y="801.41"
+   class="st2"
+   width="2.83"
+   height="1.42"
+   id="rect1633" />
+				<svg:rect
+   x="198.46"
+   y="765.95"
+   class="st2"
+   width="2.83"
+   height="11.35"
+   id="rect1635" />
+				<svg:rect
+   x="198.46"
+   y="740.41"
+   class="st2"
+   width="2.83"
+   height="1.42"
+   id="rect1637" />
+				<svg:rect
+   x="198.46"
+   y="714.88"
+   class="st2"
+   width="2.83"
+   height="1.42"
+   id="rect1639" />
+			</svg:g>
+		</svg:g>
+		<svg:g
+   id="No-Charge_Circle">
+			<svg:rect
+   x="306.15"
+   y="807.79"
+   class="st2"
+   width="1.42"
+   height="10.64"
+   id="rect1643" />
+			<svg:path
+   class="st2"
+   d="M307.57,807.79h-1.42c-0.37-19.23-16.11-34.76-35.42-34.76c-19.31,0-35.05,15.53-35.42,34.76h-1.42     c0.37-20.05,16.72-36.18,36.84-36.18C290.85,771.61,307.2,787.75,307.57,807.79z"
+   id="path1645" />
+			<svg:rect
+   x="233.9"
+   y="807.79"
+   class="st2"
+   width="1.42"
+   height="10.64"
+   id="rect1647" />
+		</svg:g>
+		<svg:rect
+   id="Throw-in_Line"
+   x="52.490002"
+   y="614.87"
+   class="st2"
+   width="4.25"
+   height="1.42" />
+		<svg:g
+   id="Team_Bench_Area">
+			
+				<svg:rect
+   id="Team_Bench_00000088106750679376283670000012279022595219760517_"
+   x="484.73"
+   y="597.85"
+   class="st2"
+   width="56.69"
+   height="1.42" />
+			<svg:rect
+   id="Team_Bench"
+   x="484.73"
+   y="852.48"
+   class="st2"
+   width="56.69"
+   height="1.42" />
+		</svg:g>
+		<svg:g
+   id="Half_Markings">
+			<svg:g
+   id="_x33__Point_Line_00000126295001213732848230000002648695590174514839_">
+				<svg:rect
+   x="83.6"
+   y="58.11"
+   class="st2"
+   width="1.42"
+   height="85.18"
+   id="rect1654" />
+				<svg:rect
+   x="456.28"
+   y="58.11"
+   class="st2"
+   width="1.42"
+   height="85.04"
+   id="rect1656" />
+				<svg:path
+   class="st2"
+   d="M457.7,143.15l-1.41-0.1h-0.01c-2.47,11.52-6.04,22.79-10.67,33.74c-9.56,22.63-23.26,42.96-40.7,60.42      c-17.44,17.45-37.75,31.16-60.36,40.73c-23.41,9.91-48.28,14.93-73.91,14.93c-25.64,0-50.51-5.02-73.92-14.93      c-22.61-9.58-42.92-23.28-60.36-40.73c-17.44-17.46-31.13-37.79-40.7-60.42c-4.61-10.91-8.16-22.13-10.63-33.6h-0.01l-1.41,0.09      c18.56,86.32,95.24,151.02,187.03,151.02C362.46,294.29,439.19,229.53,457.7,143.15z"
+   id="path1658" />
+			</svg:g>
+			<svg:g
+   id="Key_00000056419209107017033040000005191718291191303861_">
+				<svg:g
+   id="Key_Base_00000045580905087958776380000009480438004150356358_">
+					<svg:path
+   class="st2"
+   d="M338.66,58.11v163.13H202.6V58.11H338.66 M340.07,56.69H201.19v165.97h138.89V56.69L340.07,56.69z"
+   id="path1661" />
+					<svg:path
+   class="st2"
+   d="M321.64,222.66h-1.41c-0.37,27.05-22.48,48.94-49.6,48.94c-27.12,0-49.23-21.89-49.6-48.94h-1.41       c0.37,27.87,23.06,50.36,51.01,50.36C298.58,273.02,321.27,250.53,321.64,222.66z"
+   id="path1663" />
+				</svg:g>
+				<svg:g
+   id="Rebound_Places_00000133531023428113855130000003839947234106507163_">
+					<svg:rect
+   x="340.07"
+   y="107.76"
+   class="st2"
+   width="2.83"
+   height="1.42"
+   id="rect1666" />
+					<svg:rect
+   x="340.07"
+   y="133.29"
+   class="st2"
+   width="2.83"
+   height="11.35"
+   id="rect1668" />
+					<svg:rect
+   x="340.07"
+   y="168.76"
+   class="st2"
+   width="2.83"
+   height="1.42"
+   id="rect1670" />
+					<svg:rect
+   x="340.07"
+   y="194.29"
+   class="st2"
+   width="2.83"
+   height="1.42"
+   id="rect1672" />
+					<svg:rect
+   x="198.35"
+   y="107.76"
+   class="st2"
+   width="2.83"
+   height="1.42"
+   id="rect1674" />
+					<svg:rect
+   x="198.35"
+   y="133.29"
+   class="st2"
+   width="2.83"
+   height="11.35"
+   id="rect1676" />
+					<svg:rect
+   x="198.35"
+   y="168.76"
+   class="st2"
+   width="2.83"
+   height="1.42"
+   id="rect1678" />
+					<svg:rect
+   x="198.35"
+   y="194.29"
+   class="st2"
+   width="2.83"
+   height="1.42"
+   id="rect1680" />
+				</svg:g>
+			</svg:g>
+			<svg:g
+   id="No-Charge_Circle_00000119105268069419404570000008776237732058513808_">
+				<svg:rect
+   x="306.05"
+   y="92.16"
+   class="st2"
+   width="1.42"
+   height="10.64"
+   id="rect1684" />
+				<svg:path
+   class="st2"
+   d="M307.47,102.79h-1.42c-0.37,19.23-16.11,34.76-35.42,34.76s-35.05-15.53-35.42-34.76h-1.42      c0.37,20.05,16.72,36.18,36.84,36.18S307.1,122.84,307.47,102.79z"
+   id="path1686" />
+				<svg:rect
+   x="233.79"
+   y="92.16"
+   class="st2"
+   width="1.42"
+   height="10.64"
+   id="rect1688" />
+			</svg:g>
+			
+				<svg:rect
+   id="Throw-in_Line_00000155855732892319826830000001737842726948715944_"
+   x="52.490002"
+   y="294.29001"
+   class="st2"
+   width="4.25"
+   height="1.42" />
+			<svg:g
+   id="Team_Bench_Area_00000074407288892148501920000002787382391698087838_">
+				
+					<svg:rect
+   id="Team_Bench_00000085214562878665392920000002217376610200284599_"
+   x="484.62"
+   y="311.32"
+   class="st2"
+   width="56.69"
+   height="1.42" />
+				
+					<svg:rect
+   id="Team_Bench_00000018940718475814950360000009421589212662107563_"
+   x="484.62"
+   y="56.69"
+   class="st2"
+   width="56.69"
+   height="1.42" />
+			</svg:g>
+		<svg:rect
+   id="rect1876"
+   x="484.73001"
+   y="294.29001"
+   class="st2"
+   width="4.25"
+   height="1.42" /></svg:g>
+	<svg:rect
+   id="Throw-in_Line-3"
+   x="484.73001"
+   y="614.87"
+   class="st2"
+   width="4.25"
+   height="1.42"
+   style="fill:#ffffff" /></svg:g>
+</svg:g>
+<style
+   type="text/css"
+   id="custom-page-zoom-css" /></svg:svg>

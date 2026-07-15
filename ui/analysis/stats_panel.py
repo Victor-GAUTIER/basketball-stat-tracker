@@ -214,6 +214,7 @@ class StatsPanel(QWidget):
                 player.id,
                 {}
             )
+            print(player.name, player_stats)
 
 
             pts = (
@@ -235,11 +236,11 @@ class StatsPanel(QWidget):
             fg_att = (
                 player_stats.get("2PTS_MADE", 0)
                 +
-                player_stats.get("2PTS_MISS", 0)
+                player_stats.get("2PTS_MISSED", 0)
                 +
                 player_stats.get("3PTS_MADE", 0)
                 +
-                player_stats.get("3PTS_MISS", 0)
+                player_stats.get("3PTS_MISSED", 0)
             )
 
 
@@ -252,7 +253,7 @@ class StatsPanel(QWidget):
             three_att = (
                 player_stats.get("3PTS_MADE", 0)
                 +
-                player_stats.get("3PTS_MISS", 0)
+                player_stats.get("3PTS_MISSED", 0)
             )
 
 
@@ -265,7 +266,7 @@ class StatsPanel(QWidget):
             ft_att = (
                 player_stats.get("FT_MADE", 0)
                 +
-                player_stats.get("FT_MISS", 0)
+                player_stats.get("FT_MISSED", 0)
             )
 
 

@@ -13,12 +13,14 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QPushButton,
+    QInputDialog,
     QSplitter,
     QStatusBar,
     QTabWidget,
     QVBoxLayout,
     QWidget,
 )
+
 
 from controller.analysis_controller import AnalysisController
 
@@ -27,16 +29,18 @@ from data.models import Player
 
 from export.csv_export import export_events_to_csv
 
+
 from ui.analysis.video_panel import VideoPanel
 from ui.analysis.player_panel import PlayerPanel
 from ui.analysis.event_panel import EventPanel, EVENT_TYPES
 from ui.analysis.recent_events_panel import RecentEventsPanel
 from ui.analysis.stats_panel import StatsPanel
-from ui.launch_window import LaunchWindow
+from ui.analysis.shot_chart_widget import ShotChartWidget
 
 
 
 class AnalysisWindow(QMainWindow):
+
 
     def __init__(
         self,
@@ -49,7 +53,9 @@ class AnalysisWindow(QMainWindow):
 
 
         self.database = database
+
         self.launch_window = launch_window
+
 
         self.controller = AnalysisController(
             database,
@@ -59,10 +65,16 @@ class AnalysisWindow(QMainWindow):
 
         self._all_players: List[Player] = []
 
+
+        self.home_players: List[Player] = []
+
+        self.away_players: List[Player] = []
+
         self._shortcuts = []
 
 
         game = self.controller.get_game()
+
 
         self.setWindowTitle(
             f"Analyse - {game.name}"
@@ -93,7 +105,7 @@ class AnalysisWindow(QMainWindow):
 
 
     # =====================================================
-    # Construction UI
+    # Construction interface
     # =====================================================
 
     def _build_ui(self):
@@ -107,7 +119,7 @@ class AnalysisWindow(QMainWindow):
         )
 
 
-        layout = QVBoxLayout(
+        main_layout = QVBoxLayout(
             central
         )
 
@@ -117,9 +129,10 @@ class AnalysisWindow(QMainWindow):
         )
 
 
-        # ==============================
+
+        # =========================
         # ONGLET ANALYSE
-        # ==============================
+        # =========================
 
         analysis_tab = QWidget()
 
@@ -128,15 +141,15 @@ class AnalysisWindow(QMainWindow):
         )
 
 
-        main_splitter = QSplitter(
+        splitter = QSplitter(
             Qt.Orientation.Horizontal
         )
 
 
 
-        # ------------------------------
-        # Partie vidéo + derniers events
-        # ------------------------------
+        # -------------------------
+        # Partie vidéo
+        # -------------------------
 
         video_container = QWidget()
 
@@ -174,15 +187,15 @@ class AnalysisWindow(QMainWindow):
         )
 
 
-        main_splitter.addWidget(
+        splitter.addWidget(
             video_container
         )
 
 
 
-        # ------------------------------
+        # -------------------------
         # Partie droite
-        # ------------------------------
+        # -------------------------
 
         right_widget = QWidget()
 
@@ -197,8 +210,9 @@ class AnalysisWindow(QMainWindow):
 
 
         self.selected_player_label = QLabel(
-            "Aucun joueur sélectionné"
+            "Aucune joueuse sélectionnée"
         )
+
 
         self.selected_player_label.setStyleSheet(
             "font-weight:bold;"
@@ -206,11 +220,30 @@ class AnalysisWindow(QMainWindow):
 
 
 
-        self.event_panel = EventPanel(
+        # Terrain de tirs
+
+        self.shot_chart = ShotChartWidget(
+            "assets/court.svg",
             self
         )
 
 
+        self.shot_chart.shot_clicked.connect(
+            self._on_shot_clicked
+        )
+
+
+
+        # Evénements classiques
+
+        self.event_panel = EventPanel(
+            self
+        )
+
+        self.event_panel.setMaximumHeight(280)
+
+
+        # Boutons
 
         buttons_layout = QHBoxLayout()
 
@@ -223,7 +256,6 @@ class AnalysisWindow(QMainWindow):
         self.undo_button.clicked.connect(
             self._on_undo_event
         )
-
 
 
         self.export_button = QPushButton(
@@ -258,9 +290,15 @@ class AnalysisWindow(QMainWindow):
         )
 
 
+        right_layout.addWidget(
+            self.shot_chart,
+            stretch=3
+        )
+
 
         right_layout.addWidget(
-            self.event_panel
+            self.event_panel,
+            stretch=0
         )
 
 
@@ -270,32 +308,32 @@ class AnalysisWindow(QMainWindow):
 
 
 
-        main_splitter.addWidget(
+        splitter.addWidget(
             right_widget
         )
 
 
-        main_splitter.setStretchFactor(
+        splitter.setStretchFactor(
             0,
             3
         )
 
 
-        main_splitter.setStretchFactor(
+        splitter.setStretchFactor(
             1,
             1
         )
 
 
         analysis_layout.addWidget(
-            main_splitter
+            splitter
         )
 
 
 
-        # ==============================
+        # =========================
         # ONGLET STATS
-        # ==============================
+        # =========================
 
         stats_tab = QWidget()
 
@@ -327,7 +365,7 @@ class AnalysisWindow(QMainWindow):
         )
 
 
-        layout.addWidget(
+        main_layout.addWidget(
             self.tabs
         )
 
@@ -398,19 +436,19 @@ class AnalysisWindow(QMainWindow):
         # Changer de match
         # -------------------------
 
-        change_game = QAction(
+        change_game_action = QAction(
             "Changer de match",
             self
         )
 
 
-        change_game.triggered.connect(
+        change_game_action.triggered.connect(
             self._change_game
         )
 
 
         options_menu.addAction(
-            change_game
+            change_game_action
         )
 
 
@@ -422,11 +460,6 @@ class AnalysisWindow(QMainWindow):
 
         self.controller.set_quarter(
             quarter
-        )
-
-
-        self.quarter_combo.setCurrentIndex(
-            quarter - 1
         )
 
 
@@ -446,17 +479,26 @@ class AnalysisWindow(QMainWindow):
         )
 
 
-        if reply == QMessageBox.StandardButton.Yes:
-
-            if self.launch_window:
-
-                self.launch_window.show()
-                self.launch_window.raise_()
-                self.launch_window.activateWindow()
-                self.launch_window._load_games()
+        if reply != QMessageBox.StandardButton.Yes:
+            return
 
 
-            self.close()
+
+        if self.launch_window:
+
+            self.launch_window.show()
+
+            self.launch_window.raise_()
+
+            self.launch_window.activateWindow()
+
+            self.launch_window._load_games()
+
+
+
+        self.close()
+
+
 
     # =====================================================
     # Raccourcis clavier
@@ -464,46 +506,66 @@ class AnalysisWindow(QMainWindow):
 
     def _register_shortcuts(self):
 
+
         shortcuts = [
+
             # Vidéo
+
             (
                 "Space",
                 self.video_panel.toggle_play_pause
             ),
 
+
             (
                 "Left",
-                lambda: self.video_panel.seek_relative(-5000)
+                lambda:
+                self.video_panel.seek_relative(-5000)
             ),
+
 
             (
                 "Right",
-                lambda: self.video_panel.seek_relative(5000)
+                lambda:
+                self.video_panel.seek_relative(5000)
             ),
 
-            # Événements
+
+
+            # Evénements
+
             *[
                 (
                     key,
-                    lambda c=code: self._on_event_triggered(c)
+                    lambda c=code:
+                    self._on_event_triggered(c)
                 )
-                for code, label, key in EVENT_TYPES
+
+                for code, label, key
+                in EVENT_TYPES
             ],
 
+
+
             # Actions
+
             (
                 "Ctrl+Z",
                 self._on_undo_event
             ),
 
+
             (
                 "Ctrl+E",
                 self._on_export_csv
             ),
+
         ]
 
 
+
         for key, callback in shortcuts:
+
 
             shortcut = QShortcut(
                 QKeySequence(key),
@@ -525,9 +587,8 @@ class AnalysisWindow(QMainWindow):
                 shortcut
             )
 
-
     # =====================================================
-    # Chargement
+    # Chargement du match
     # =====================================================
 
     def _load_game_data(self):
@@ -546,18 +607,27 @@ class AnalysisWindow(QMainWindow):
             return
 
 
+        # -------------------------
+        # Chargement vidéo
+        # -------------------------
 
         self.video_panel.load_video(
             game.video_path
         )
 
 
+        # -------------------------
+        # Récupération des équipes
+        # -------------------------
+
         teams = self.controller.get_teams()
 
 
         home = next(
             (
-                t for t, is_home in teams
+                team
+                for team, is_home
+                in teams
                 if is_home
             ),
             None
@@ -566,47 +636,76 @@ class AnalysisWindow(QMainWindow):
 
         away = next(
             (
-                t for t, is_home in teams
+                team
+                for team, is_home
+                in teams
                 if not is_home
             ),
             None
         )
 
 
-        home_players = (
-            self.controller.get_players_for_team(home.id)
+        # -------------------------
+        # Récupération joueurs
+        # -------------------------
+
+        self.home_players = (
+            self.controller.get_players_for_team(
+                home.id
+            )
             if home
             else []
         )
 
 
-        away_players = (
-            self.controller.get_players_for_team(away.id)
+        self.away_players = (
+            self.controller.get_players_for_team(
+                away.id
+            )
             if away
             else []
         )
 
 
+
+        # -------------------------
+        # Chargement PlayerPanel
+        # -------------------------
+
         self.player_panel.set_teams(
-            home.name if home else "Equipe A",
-            home_players,
-            away.name if away else "Equipe B",
-            away_players
+            home.name
+            if home
+            else "Equipe A",
+
+            self.home_players,
+
+            away.name
+            if away
+            else "Equipe B",
+
+            self.away_players
         )
 
+
+        # -------------------------
+        # Tous les joueurs
+        # -------------------------
 
         self._all_players = (
-            home_players +
-            away_players
+            self.home_players
+            +
+            self.away_players
         )
 
+
+        # -------------------------
+        # Rafraîchissement affichage
+        # -------------------------
 
         self._refresh_data()
 
-
-
     # =====================================================
-    # Actions
+    # Sélection joueur
     # =====================================================
 
     def _on_player_selected(
@@ -622,10 +721,14 @@ class AnalysisWindow(QMainWindow):
         if player:
 
             self.selected_player_label.setText(
-                f"Joueur sélectionné : #{player.number} {player.name}"
+                f"Joueuse sélectionnée : #{player.number} {player.name}"
             )
 
 
+
+    # =====================================================
+    # Quart temps
+    # =====================================================
 
     def _on_quarter_changed(
         self,
@@ -638,18 +741,22 @@ class AnalysisWindow(QMainWindow):
 
 
 
+    # =====================================================
+    # Enregistrement événement classique
+    # =====================================================
     def _on_event_triggered(
         self,
         event_code: str
     ):
 
-        player_id = (
-            self.player_panel.selected_player_id()
-        )
-
+        player_id = self.player_panel.selected_player_id()
 
         if player_id is None:
-
+            QMessageBox.warning(
+                self,
+                "Aucune joueuse",
+                "Sélectionnez une joueuse avant d'ajouter un événement."
+            )
             return
 
 
@@ -664,6 +771,78 @@ class AnalysisWindow(QMainWindow):
 
 
 
+    # =====================================================
+    # Enregistrement d'un tir avec coordonnées
+    # =====================================================
+    def _on_shot_clicked(
+        self,
+        x: float,
+        y: float,
+        missed: bool
+    ):
+
+        player_id = self.player_panel.selected_player_id()
+
+
+        if player_id is None:
+
+            QMessageBox.warning(
+                self,
+                "Aucune joueuse",
+                "Sélectionnez une joueuse avant d'ajouter un tir."
+            )
+
+            return
+
+
+
+        shot_value = self.shot_chart.shot_value(
+            x,
+            y
+        )
+
+
+        if missed:
+
+            event_type = (
+                shot_value
+                +
+                "_MISSED"
+            )
+
+        else:
+
+            event_type = (
+                shot_value
+                +
+                "_MADE"
+            )
+
+
+        print(
+            "TIR:",
+            event_type,
+            x,
+            y
+        )
+
+
+        self.controller.record_event(
+            player_id,
+            self.video_panel.current_timestamp(),
+            event_type,
+            x,
+            y
+        )
+
+
+        self._refresh_data()
+
+
+    # =====================================================
+    # Annulation dernier événement
+    # =====================================================
+
     def _on_undo_event(self):
 
         self.controller.undo_last_event()
@@ -671,6 +850,10 @@ class AnalysisWindow(QMainWindow):
         self._refresh_data()
 
 
+
+    # =====================================================
+    # Export CSV
+    # =====================================================
 
     def _on_export_csv(self):
 
@@ -691,7 +874,7 @@ class AnalysisWindow(QMainWindow):
 
 
         players = {
-            p.id:p
+            p.id: p
             for p in self._all_players
         }
 
@@ -705,7 +888,7 @@ class AnalysisWindow(QMainWindow):
 
 
     # =====================================================
-    # Actualisation
+    # Actualisation affichage
     # =====================================================
 
     def _refresh_data(self):
@@ -714,7 +897,7 @@ class AnalysisWindow(QMainWindow):
 
 
         players = {
-            p.id:p
+            p.id: p
             for p in self._all_players
         }
 
@@ -726,6 +909,7 @@ class AnalysisWindow(QMainWindow):
 
 
         self.stats_panel.refresh(
-            self._all_players,
+            self.home_players,
+            self.away_players,
             self.controller.get_player_stats()
         )
