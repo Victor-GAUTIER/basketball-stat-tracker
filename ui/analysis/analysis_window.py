@@ -1,8 +1,20 @@
 """Fenêtre principale d'analyse vidéo d'un match.
 
 Assemble le lecteur vidéo, les listes de joueurs, le panneau d'événements et
-le tableau de statistiques. C'est ici que les clics utilisateur sont
-transformés en événements horodatés, enregistrés via AnalysisController.
+la liste des derniers événements enregistrés. Les statistiques cumulées
+complètes sont consultables dans une fenêtre séparée (StatsWindow).
+
+Raccourcis clavier actifs dans cette fenêtre :
+    Espace       : lecture / pause
+    Flèche gauche  : recule de 5s
+    Flèche droite  : avance de 5s
+    Ctrl+Z       : annule le dernier événement
+    2 / Shift+2  : 2PTS+ / 2PTS-
+    3 / Shift+3  : 3PTS+ / 3PTS-
+    1 / Shift+1  : LF+ / LF-
+    O / D        : rebond offensif / défensif
+    A / T / S / B / F : passe décisive / perte de balle / interception /
+                        contre / faute
 """
 
 from __future__ import annotations
@@ -10,6 +22,7 @@ from __future__ import annotations
 from typing import List, Optional
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QComboBox,
     QFileDialog,
@@ -30,7 +43,8 @@ from data.models import Player
 from export.csv_export import export_events_to_csv
 from ui.analysis.event_panel import EventPanel
 from ui.analysis.player_panel import PlayerPanel
-from ui.analysis.stats_panel import StatsPanel
+from ui.analysis.recent_events_panel import RecentEventsPanel
+from ui.analysis.stats_window import StatsWindow
 from ui.analysis.video_panel import VideoPanel
 
 
@@ -45,6 +59,7 @@ class AnalysisWindow(QMainWindow):
         self.home_team = None
         self.away_team = None
         self._all_players: List[Player] = []
+        self.stats_window: Optional[StatsWindow] = None
 
         game = self.controller.get_game()
         title = f"Analyse - {game.name}" if game else "Analyse du match"
@@ -52,6 +67,7 @@ class AnalysisWindow(QMainWindow):
         self.resize(1350, 820)
 
         self._build_ui()
+        self._register_shortcuts()
         self._load_game_data()
 
         self.setStatusBar(QStatusBar(self))
@@ -71,7 +87,7 @@ class AnalysisWindow(QMainWindow):
         self.video_panel = VideoPanel(self)
         splitter.addWidget(self.video_panel)
 
-        # --- Colonne droite : joueurs + événements + stats ---
+        # --- Colonne droite : joueurs + événements + derniers événements ---
         right_widget = QWidget(self)
         right_layout = QVBoxLayout(right_widget)
 
@@ -89,22 +105,34 @@ class AnalysisWindow(QMainWindow):
 
         self.event_panel = EventPanel(self)
 
+        shortcuts_label = QLabel(
+            "Raccourcis : Espace = Lecture/Pause · ← -5s · → +5s · Ctrl+Z = Annuler",
+            self,
+        )
+        shortcuts_label.setStyleSheet("color: gray; font-size: 11px;")
+
         actions_row = QHBoxLayout()
         self.undo_button = QPushButton("Annuler le dernier événement", self)
+        self.undo_button.setShortcut(QKeySequence.StandardKey.Undo)
         self.undo_button.clicked.connect(self._on_undo_event)
+        self.stats_button = QPushButton("Voir les statistiques", self)
+        self.stats_button.clicked.connect(self._on_open_stats)
         self.export_button = QPushButton("Exporter en CSV", self)
         self.export_button.clicked.connect(self._on_export_csv)
         actions_row.addWidget(self.undo_button)
+        actions_row.addWidget(self.stats_button)
         actions_row.addWidget(self.export_button)
 
-        self.stats_panel = StatsPanel(self)
+        self.recent_events_panel = RecentEventsPanel(self)
 
         right_layout.addWidget(self.player_panel, stretch=2)
         right_layout.addWidget(self.selected_player_label)
         right_layout.addLayout(quarter_row)
         right_layout.addWidget(self.event_panel)
+        right_layout.addWidget(shortcuts_label)
         right_layout.addLayout(actions_row)
-        right_layout.addWidget(self.stats_panel, stretch=2)
+        right_layout.addWidget(QLabel("Derniers événements :", self))
+        right_layout.addWidget(self.recent_events_panel, stretch=2)
 
         splitter.addWidget(right_widget)
         splitter.setStretchFactor(0, 2)
@@ -114,6 +142,13 @@ class AnalysisWindow(QMainWindow):
 
         self.player_panel.player_selected.connect(self._on_player_selected)
         self.event_panel.event_triggered.connect(self._on_event_triggered)
+
+    def _register_shortcuts(self) -> None:
+        # Les raccourcis des boutons (événements, lecture/pause, ±5s, undo)
+        # sont déjà portés par les boutons eux-mêmes ; on ajoute ici ceux
+        # qui n'ont pas de bouton dédié.
+        QShortcut(QKeySequence("Ctrl+E"), self, activated=self._on_export_csv)
+        QShortcut(QKeySequence("Ctrl+I"), self, activated=self._on_open_stats)
 
     # ------------------------------------------------------------------
     # Chargement des données du match
@@ -144,7 +179,7 @@ class AnalysisWindow(QMainWindow):
         )
 
         self._all_players = home_players + away_players
-        self._refresh_stats()
+        self._refresh_data()
 
     # ------------------------------------------------------------------
     # Slots
@@ -173,7 +208,7 @@ class AnalysisWindow(QMainWindow):
         self.statusBar().showMessage(
             f"Événement '{event_code}' enregistré à {timestamp:.1f}s", 3000
         )
-        self._refresh_stats()
+        self._refresh_data()
 
     def _on_undo_event(self) -> None:
         removed = self.controller.undo_last_event()
@@ -181,7 +216,15 @@ class AnalysisWindow(QMainWindow):
             self.statusBar().showMessage("Aucun événement à annuler.", 3000)
         else:
             self.statusBar().showMessage("Dernier événement annulé.", 3000)
-            self._refresh_stats()
+            self._refresh_data()
+
+    def _on_open_stats(self) -> None:
+        if self.stats_window is None:
+            self.stats_window = StatsWindow(self.controller, self)
+        self.stats_window.refresh(self._all_players)
+        self.stats_window.show()
+        self.stats_window.raise_()
+        self.stats_window.activateWindow()
 
     def _on_export_csv(self) -> None:
         path, _ = QFileDialog.getSaveFileName(
@@ -198,6 +241,10 @@ class AnalysisWindow(QMainWindow):
     # ------------------------------------------------------------------
     # Rafraîchissement
     # ------------------------------------------------------------------
-    def _refresh_stats(self) -> None:
-        stats = self.controller.get_player_stats()
-        self.stats_panel.refresh(self._all_players, stats)
+    def _refresh_data(self) -> None:
+        events = self.controller.get_events()
+        players_by_id = {p.id: p for p in self._all_players}
+        self.recent_events_panel.refresh(events, players_by_id)
+
+        if self.stats_window is not None and self.stats_window.isVisible():
+            self.stats_window.refresh(self._all_players)

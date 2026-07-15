@@ -78,8 +78,8 @@ class SetupWindow(QMainWindow):
 
         # --- Composition des équipes ---
         teams_row = QHBoxLayout()
-        self.home_team_editor = TeamEditor("Équipe à domicile", self)
-        self.away_team_editor = TeamEditor("Équipe à l'extérieur", self)
+        self.home_team_editor = TeamEditor("Équipe à domicile", self.database, self)
+        self.away_team_editor = TeamEditor("Équipe à l'extérieur", self.database, self)
         teams_row.addWidget(self.home_team_editor)
         teams_row.addWidget(self.away_team_editor)
 

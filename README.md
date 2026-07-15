@@ -27,20 +27,51 @@ La base de données SQLite (`basketball_stats.db`) est créée automatiquement
 
 ## Utilisation
 
-1. **Préparation du match (SetupWindow)** : renseignez le nom du match, la
-   date et sélectionnez le fichier vidéo. Pour chaque équipe, saisissez le
-   nom et ajoutez les joueurs (nom + numéro) via le bouton "Ajouter un
-   joueur". Cliquez sur **Commencer l'analyse**.
-2. **Analyse vidéo (AnalysisWindow)** : à gauche, le lecteur vidéo (lecture,
-   pause, ±5s, curseur de progression). À droite, les deux effectifs, le
-   sélecteur de quart-temps, les boutons d'événements (2PTS+, 3PTS-, RO, RD,
-   AST, TO, STL, BLK, FAUTE...) et le tableau de statistiques en direct.
-   Workflow : cliquez sur un joueur puis sur un événement — il est
-   enregistré avec le timestamp vidéo courant. Le bouton "Annuler le
-   dernier événement" permet de corriger une erreur de saisie.
-3. **Export** : le bouton "Exporter en CSV" génère un fichier CSV listant
+1. **Écran de lancement (LaunchWindow)** : au démarrage, choisissez soit
+   **+ Nouveau match**, soit un match déjà enregistré dans la liste (double-clic
+   ou bouton "Ouvrir la sélection") pour reprendre son analyse là où vous
+   l'aviez laissée. Tous les matchs, équipes et joueurs sont conservés d'une
+   session à l'autre dans `basketball_stats.db`.
+2. **Préparation du match (SetupWindow)** : renseignez le nom du match, la
+   date et sélectionnez le fichier vidéo. Pour chaque équipe, vous pouvez soit
+   choisir **une équipe déjà enregistrée** dans le menu déroulant (son nom et
+   son effectif sont alors préremplis automatiquement), soit saisir une
+   nouvelle équipe et ajouter les joueurs (nom + numéro) via le bouton
+   "Ajouter un joueur". Cliquez sur **Commencer l'analyse**.
+3. **Analyse vidéo (AnalysisWindow)** : à gauche, le lecteur vidéo avec un
+   bouton unique lecture/pause, ±5s et une barre de progression cliquable
+   (un clic n'importe où sur la barre déplace immédiatement la lecture à cet
+   endroit). À droite, les deux effectifs, le sélecteur de quart-temps, les
+   boutons d'événements, et la liste des **derniers événements enregistrés**
+   (les plus récents en tête) pour vérifier rapidement sa saisie. Workflow :
+   cliquez sur un joueur puis sur un événement — il est enregistré avec le
+   timestamp vidéo courant.
+4. **Statistiques (StatsWindow)** : le bouton "Voir les statistiques" ouvre
+   une fenêtre séparée avec le tableau complet des statistiques cumulées par
+   joueur, qui se rafraîchit automatiquement à chaque nouvel événement.
+5. **Export** : le bouton "Exporter en CSV" génère un fichier CSV listant
    tous les événements du match (timestamp, quart-temps, joueur, type
    d'événement, coordonnées x/y si renseignées).
+
+### Raccourcis clavier (dans la fenêtre d'analyse)
+
+| Touche              | Action              |
+|---------------------|---------------------|
+| Espace               | Lecture / Pause     |
+| ← (flèche gauche)   | Recule de 5s        |
+| → (flèche droite)   | Avance de 5s        |
+| Ctrl+Z               | Annule le dernier événement |
+| Ctrl+E                | Exporter en CSV     |
+| Ctrl+I                 | Ouvrir les statistiques |
+| 2 / Maj+2            | 2PTS+ / 2PTS-        |
+| 3 / Maj+3            | 3PTS+ / 3PTS-        |
+| 1 / Maj+1            | LF+ / LF-            |
+| O / D                 | Rebond offensif / défensif |
+| A / T / S / B / F   | Passe décisive / perte de balle / interception / contre / faute |
+
+Ces raccourcis sont pour l'instant fixes (codés dans `event_panel.py` et
+`video_panel.py`) ; les rendre configurables par l'utilisateur est une
+évolution naturelle listée plus bas.
 
 ## Architecture
 
@@ -54,16 +85,19 @@ basketball-stat-tracker/
 │   ├── database.py                # couche d'accès SQLite (CRUD)
 │   └── models.py                  # dataclasses Team / Player / Game / Event
 ├── ui/
+│   ├── launch_window.py           # écran d'accueil : nouveau match / reprise
 │   ├── setup/
 │   │   ├── setup_window.py        # fenêtre de préparation du match
-│   │   ├── team_editor.py         # widget de composition d'une équipe
+│   │   ├── team_editor.py         # composition d'une équipe (+ rechargement d'une équipe existante)
 │   │   └── player_editor.py       # boîte de dialogue d'ajout de joueur
 │   └── analysis/
-│       ├── analysis_window.py     # fenêtre principale d'analyse
-│       ├── video_panel.py         # lecteur vidéo + contrôles
+│       ├── analysis_window.py     # fenêtre principale d'analyse (+ raccourcis clavier)
+│       ├── video_panel.py         # lecteur vidéo (lecture/pause unique, barre cliquable)
 │       ├── player_panel.py        # listes des deux effectifs
-│       ├── event_panel.py         # boutons d'événements
-│       └── stats_panel.py         # tableau de statistiques en direct
+│       ├── event_panel.py         # boutons d'événements + raccourcis
+│       ├── recent_events_panel.py # liste des derniers événements enregistrés
+│       ├── stats_panel.py         # tableau de statistiques (widget réutilisable)
+│       └── stats_window.py        # fenêtre séparée des statistiques complètes
 ├── export/
 │   └── csv_export.py              # export CSV des événements
 └── assets/                        # ressources statiques (icônes, etc.)
@@ -93,7 +127,8 @@ statistiques par joueur, par équipe ou par match/saison.
 
 ## Évolutions prévues (architecture déjà prête pour)
 
-- Raccourcis clavier configurables pour les boutons d'événements.
+- Rendre les raccourcis clavier configurables par l'utilisateur (actuellement
+  fixes, définis dans `EVENT_TYPES` et `VideoPanel`).
 - Score en direct et gestion des quarts-temps (le champ `quarter` existe déjà
   en base et un sélecteur est présent dans l'UI).
 - Gestion des remplacements et des 5 joueurs sur le terrain.

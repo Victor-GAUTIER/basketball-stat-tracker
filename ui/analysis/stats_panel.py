@@ -1,4 +1,4 @@
-"""Panneau affichant les statistiques cumulées en direct, par joueur."""
+"""Panneau affichant les statistiques cumulées, par joueur."""
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ class StatsPanel(QWidget):
 
         self.table = QTableWidget(self)
         self.table.setColumnCount(len(EVENT_TYPES) + 1)
-        headers = ["Joueur"] + [label for _, label in EVENT_TYPES]
+        headers = ["Joueur"] + [label for _code, label, _shortcut in EVENT_TYPES]
         self.table.setHorizontalHeaderLabels(headers)
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
 
@@ -32,7 +32,7 @@ class StatsPanel(QWidget):
         for row, player in enumerate(players):
             self.table.setItem(row, 0, QTableWidgetItem(f"#{player.number} {player.name}"))
             player_stats = stats.get(player.id, {})
-            for col, (code, _label) in enumerate(EVENT_TYPES, start=1):
+            for col, (code, _label, _shortcut) in enumerate(EVENT_TYPES, start=1):
                 count = player_stats.get(code, 0)
                 item = QTableWidgetItem(str(count))
                 item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
