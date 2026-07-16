@@ -342,6 +342,18 @@ class VideoPanel(QWidget):
             new_position
         )
 
+    def seek(
+        self,
+        timestamp: float
+    ):
+        """
+        Place la vidéo à un temps donné en secondes.
+        """
+
+        self.player.setPosition(
+            int(timestamp * 1000)
+        )
+
 
 
     def toggle_play_pause(self):

@@ -36,6 +36,7 @@ from ui.analysis.event_panel import EventPanel, EVENT_TYPES
 from ui.analysis.recent_events_panel import RecentEventsPanel
 from ui.analysis.stats_panel import StatsPanel
 from ui.analysis.shot_chart_widget import ShotChartWidget
+from ui.analysis.play_by_play_panel import PlayByPlayPanel
 
 
 
@@ -162,28 +163,9 @@ class AnalysisWindow(QMainWindow):
             self
         )
 
-
-        self.recent_events_panel = RecentEventsPanel(
-            self
-        )
-
-
         video_layout.addWidget(
             self.video_panel,
             stretch=8
-        )
-
-
-        video_layout.addWidget(
-            QLabel(
-                "Derniers événements :"
-            )
-        )
-
-
-        video_layout.addWidget(
-            self.recent_events_panel,
-            stretch=1
         )
 
 
@@ -378,6 +360,33 @@ class AnalysisWindow(QMainWindow):
 
         self.event_panel.event_triggered.connect(
             self._on_event_triggered
+        )
+
+        # =========================
+        # ONGLET PLAY BY PLAY
+        # =========================
+
+        playbyplay_tab = QWidget()
+
+        playbyplay_layout = QVBoxLayout(playbyplay_tab)
+
+        self.playbyplay_panel = PlayByPlayPanel(self)
+
+        playbyplay_layout.addWidget(
+            self.playbyplay_panel
+        )
+
+        self.tabs.addTab(
+            playbyplay_tab,
+            "Play by play"
+        )
+
+        self.playbyplay_panel.event_deleted.connect(
+            self._on_delete_event
+        )
+
+        self.playbyplay_panel.event_seek_requested.connect(
+            self.video_panel.seek
         )
 
     # =====================================================
@@ -849,6 +858,11 @@ class AnalysisWindow(QMainWindow):
 
         self._refresh_data()
 
+    def _on_delete_event(self, event_id: int):
+
+        self.database.delete_event(event_id)
+
+        self._refresh_data()
 
 
     # =====================================================
@@ -902,7 +916,7 @@ class AnalysisWindow(QMainWindow):
         }
 
 
-        self.recent_events_panel.refresh(
+        self.playbyplay_panel.refresh(
             events,
             players
         )
