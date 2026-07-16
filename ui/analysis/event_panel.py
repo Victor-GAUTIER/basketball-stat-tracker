@@ -14,7 +14,7 @@ from PySide6.QtWidgets import (
 EVENT_TYPES: List[Tuple[str, str, str]] = [
 
     ("FT_MADE", "LF+", "E"),
-    ("FT_MISS", "LF-", "Shift+E"),
+    ("FT_MISSED", "LF-", "Shift+E"),
 
     ("OFF_REBOUND", "RO", "Shift+Q"),
     ("DEF_REBOUND", "RD", "Q"),

@@ -37,6 +37,7 @@ from ui.analysis.recent_events_panel import RecentEventsPanel
 from ui.analysis.stats_panel import StatsPanel
 from ui.analysis.shot_chart_widget import ShotChartWidget
 from ui.analysis.play_by_play_panel import PlayByPlayPanel
+from ui.analysis.edit_event_dialog import EditEventDialog
 
 
 
@@ -385,8 +386,12 @@ class AnalysisWindow(QMainWindow):
             self._on_delete_event
         )
 
+        self.playbyplay_panel.event_edit_requested.connect(
+            self._on_edit_event
+        )
+
         self.playbyplay_panel.event_seek_requested.connect(
-            self.video_panel.seek
+            self._on_seek_from_playbyplay
         )
 
     # =====================================================
@@ -863,6 +868,43 @@ class AnalysisWindow(QMainWindow):
         self.database.delete_event(event_id)
 
         self._refresh_data()
+
+    def _on_edit_event(self, event_id: int):
+        """Ouvre la boîte de dialogue de correction pour l'événement choisi."""
+
+        event = next(
+            (e for e in self.controller.get_events() if e.id == event_id),
+            None
+        )
+
+        if event is None:
+            return
+
+        dialog = EditEventDialog(event, self._all_players, self)
+
+        if dialog.exec() != EditEventDialog.DialogCode.Accepted:
+            return
+
+        player_id, event_type = dialog.result_values()
+
+        if player_id is None or event_type is None:
+            return
+
+        self.database.update_event(event_id, player_id, event_type)
+
+        self._refresh_data()
+
+    def _on_seek_from_playbyplay(self, timestamp: float):
+        """Ramène la vidéo 5 secondes avant l'événement double-cliqué,
+        pour avoir le contexte de l'action plutôt que son tout dernier
+        instant, et bascule sur l'onglet vidéo pour la voir immédiatement.
+        """
+
+        target = max(0.0, timestamp - 5.0)
+
+        self.video_panel.seek(target)
+
+        self.tabs.setCurrentIndex(0)
 
 
     # =====================================================

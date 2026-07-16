@@ -280,6 +280,19 @@ class Database:
         self.connection.execute("DELETE FROM events WHERE id = ?", (event_id,))
         self.connection.commit()
 
+    def update_event(self, event_id: int, player_id: int, event_type: str) -> None:
+        """Corrige la joueuse et/ou le type d'un événement déjà enregistré.
+
+        Le timestamp, le quart-temps et les coordonnées x/y ne sont pas
+        modifiés : seule une erreur de saisie (mauvaise joueuse ou mauvais
+        type d'action) est corrigée ici, pas le moment de l'action.
+        """
+        self.connection.execute(
+            "UPDATE events SET player_id = ?, event_type = ? WHERE id = ?",
+            (player_id, event_type, event_id),
+        )
+        self.connection.commit()
+
     def get_events_for_game(self, game_id: int) -> List[Event]:
         cur = self.connection.execute(
             "SELECT id, game_id, player_id, timestamp, quarter, event_type, x, y "

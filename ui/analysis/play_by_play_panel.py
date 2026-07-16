@@ -14,11 +14,13 @@ from PySide6.QtWidgets import (
     )
 
 from data.models import Event, Player
+from ui.analysis.event_labels import event_label
 
 
 class PlayByPlayPanel(QWidget):
 
     event_deleted = Signal(int)
+    event_edit_requested = Signal(int)
     event_seek_requested = Signal(float)
 
     def __init__(self, parent: Optional[QWidget] = None):
@@ -84,7 +86,7 @@ class PlayByPlayPanel(QWidget):
                 time_str,
                 str(event.quarter),
                 player_name,
-                event.event_type,
+                event_label(event.event_type),
             ]
 
             for col, value in enumerate(values):
@@ -96,9 +98,14 @@ class PlayByPlayPanel(QWidget):
 
                 self.table.setItem(row, col, item)
 
-            # Bouton modifier (placeholder)
+            # Bouton modifier : ouvre la boîte de dialogue de correction
+            # (joueuse / type d'événement), gérée par la fenêtre parente.
             edit_btn = QPushButton("✏️")
-            edit_btn.setEnabled(False)
+
+            edit_btn.clicked.connect(
+                lambda checked=False, e=event:
+                self.event_edit_requested.emit(e.id)
+            )
 
             edit_widget = QWidget()
             edit_layout = QHBoxLayout(edit_widget)
