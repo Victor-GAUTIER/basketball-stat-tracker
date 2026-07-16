@@ -13,7 +13,6 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QPushButton,
-    QInputDialog,
     QSplitter,
     QStatusBar,
     QTabWidget,
@@ -29,11 +28,9 @@ from data.models import Player
 
 from export.csv_export import export_events_to_csv
 
-
 from ui.analysis.video_panel import VideoPanel
 from ui.analysis.player_panel import PlayerPanel
 from ui.analysis.event_panel import EventPanel, EVENT_TYPES
-from ui.analysis.recent_events_panel import RecentEventsPanel
 from ui.analysis.stats_panel import StatsPanel
 from ui.analysis.shot_chart_widget import ShotChartWidget
 from ui.analysis.play_by_play_panel import PlayByPlayPanel
@@ -71,6 +68,16 @@ class AnalysisWindow(QMainWindow):
         self.home_players: List[Player] = []
 
         self.away_players: List[Player] = []
+
+
+        self.home_team = None
+
+        self.away_team = None
+
+
+        # True = équipe domicile attaque le panier de droite
+        self.home_attacks_right = True
+
 
         self._shortcuts = []
 
@@ -164,6 +171,7 @@ class AnalysisWindow(QMainWindow):
             self
         )
 
+
         video_layout.addWidget(
             self.video_panel,
             stretch=8
@@ -223,10 +231,11 @@ class AnalysisWindow(QMainWindow):
             self
         )
 
-        self.event_panel.setMaximumHeight(280)
+        self.event_panel.setMaximumHeight(
+            280
+        )
 
 
-        # Boutons
 
         buttons_layout = QHBoxLayout()
 
@@ -280,15 +289,13 @@ class AnalysisWindow(QMainWindow):
 
 
         right_layout.addWidget(
-            self.event_panel,
-            stretch=0
+            self.event_panel
         )
 
 
         right_layout.addLayout(
             buttons_layout
         )
-
 
 
         splitter.addWidget(
@@ -319,6 +326,7 @@ class AnalysisWindow(QMainWindow):
         # =========================
 
         stats_tab = QWidget()
+
 
         stats_layout = QVBoxLayout(
             stats_tab
@@ -363,32 +371,45 @@ class AnalysisWindow(QMainWindow):
             self._on_event_triggered
         )
 
+
+
         # =========================
         # ONGLET PLAY BY PLAY
         # =========================
 
         playbyplay_tab = QWidget()
 
-        playbyplay_layout = QVBoxLayout(playbyplay_tab)
 
-        self.playbyplay_panel = PlayByPlayPanel(self)
+        playbyplay_layout = QVBoxLayout(
+            playbyplay_tab
+        )
+
+
+        self.playbyplay_panel = PlayByPlayPanel(
+            self
+        )
+
 
         playbyplay_layout.addWidget(
             self.playbyplay_panel
         )
+
 
         self.tabs.addTab(
             playbyplay_tab,
             "Play by play"
         )
 
+
         self.playbyplay_panel.event_deleted.connect(
             self._on_delete_event
         )
 
+
         self.playbyplay_panel.event_edit_requested.connect(
             self._on_edit_event
         )
+
 
         self.playbyplay_panel.event_seek_requested.connect(
             self._on_seek_from_playbyplay
@@ -447,6 +468,27 @@ class AnalysisWindow(QMainWindow):
 
 
         # -------------------------
+        # Inverser les côtés du terrain
+        # -------------------------
+
+        invert_sides_action = QAction(
+            "Inverser les côtés du terrain",
+            self
+        )
+
+
+        invert_sides_action.triggered.connect(
+            self._toggle_court_sides
+        )
+
+
+        options_menu.addAction(
+            invert_sides_action
+        )
+
+
+
+        # -------------------------
         # Changer de match
         # -------------------------
 
@@ -477,12 +519,98 @@ class AnalysisWindow(QMainWindow):
         )
 
 
+        # Mise à jour automatique du côté attaqué
+        self._update_shot_chart_orientation()
+
+
         self.statusBar().showMessage(
             f"Quart-temps {quarter}",
             3000
         )
 
 
+
+    # =====================================================
+    # Orientation du terrain
+    # =====================================================
+
+    def _toggle_court_sides(self):
+
+        """
+        Inversion manuelle des côtés attaqués.
+        Utile si la caméra ou le terrain est inversé.
+        """
+
+        self.home_attacks_right = not self.home_attacks_right
+
+
+        self._update_shot_chart_orientation()
+
+
+        self.statusBar().showMessage(
+            "Côtés du terrain inversés",
+            3000
+        )
+
+
+
+    def _current_home_attacks_right(self) -> bool:
+
+        """
+        Retourne le côté actuellement attaqué par l'équipe domicile.
+
+        Avant la mi-temps :
+            home_attacks_right
+
+        Après la mi-temps :
+            côté inverse
+        """
+
+        attacks_right = self.home_attacks_right
+
+
+        if self.controller.get_current_quarter() >= 3:
+
+            attacks_right = not attacks_right
+
+
+        return attacks_right
+
+
+
+    def _update_shot_chart_orientation(self):
+
+        """
+        Met à jour l'affichage du terrain :
+        - équipe qui attaque à droite
+        - noms des équipes
+        """
+
+        home_name = (
+            self.home_team.name
+            if self.home_team
+            else "Domicile"
+        )
+
+
+        away_name = (
+            self.away_team.name
+            if self.away_team
+            else "Extérieur"
+        )
+
+
+        self.shot_chart.set_orientation(
+            self._current_home_attacks_right(),
+            home_name,
+            away_name,
+        )
+
+
+
+    # =====================================================
+    # Changer de match
+    # =====================================================
 
     def _change_game(self):
 
@@ -494,6 +622,7 @@ class AnalysisWindow(QMainWindow):
 
 
         if reply != QMessageBox.StandardButton.Yes:
+
             return
 
 
@@ -506,13 +635,12 @@ class AnalysisWindow(QMainWindow):
 
             self.launch_window.activateWindow()
 
+
             self.launch_window._load_games()
 
 
 
         self.close()
-
-
 
     # =====================================================
     # Raccourcis clavier
@@ -522,8 +650,6 @@ class AnalysisWindow(QMainWindow):
 
 
         shortcuts = [
-
-            # Vidéo
 
             (
                 "Space",
@@ -546,8 +672,6 @@ class AnalysisWindow(QMainWindow):
 
 
 
-            # Evénements
-
             *[
                 (
                     key,
@@ -560,8 +684,6 @@ class AnalysisWindow(QMainWindow):
             ],
 
 
-
-            # Actions
 
             (
                 "Ctrl+Z",
@@ -601,6 +723,8 @@ class AnalysisWindow(QMainWindow):
                 shortcut
             )
 
+
+
     # =====================================================
     # Chargement du match
     # =====================================================
@@ -621,20 +745,19 @@ class AnalysisWindow(QMainWindow):
             return
 
 
-        # -------------------------
-        # Chargement vidéo
-        # -------------------------
 
         self.video_panel.load_video(
             game.video_path
         )
 
 
+
         # -------------------------
-        # Récupération des équipes
+        # Equipes
         # -------------------------
 
         teams = self.controller.get_teams()
+
 
 
         home = next(
@@ -648,6 +771,7 @@ class AnalysisWindow(QMainWindow):
         )
 
 
+
         away = next(
             (
                 team
@@ -659,64 +783,79 @@ class AnalysisWindow(QMainWindow):
         )
 
 
+
+        # Sauvegarde des équipes
+        self.home_team = home
+
+        self.away_team = away
+
+
+
         # -------------------------
-        # Récupération joueurs
+        # Joueurs
         # -------------------------
 
         self.home_players = (
+
             self.controller.get_players_for_team(
                 home.id
             )
+
             if home
             else []
+
         )
+
 
 
         self.away_players = (
+
             self.controller.get_players_for_team(
                 away.id
             )
+
             if away
             else []
+
         )
 
 
 
-        # -------------------------
-        # Chargement PlayerPanel
-        # -------------------------
-
         self.player_panel.set_teams(
+
             home.name
             if home
             else "Equipe A",
 
             self.home_players,
 
+
             away.name
             if away
             else "Equipe B",
 
             self.away_players
+
         )
 
 
-        # -------------------------
-        # Tous les joueurs
-        # -------------------------
 
         self._all_players = (
+
             self.home_players
             +
             self.away_players
+
         )
 
 
-        # -------------------------
-        # Rafraîchissement affichage
-        # -------------------------
 
         self._refresh_data()
+
+
+        self._update_shot_chart_orientation()
+
+
 
     # =====================================================
     # Sélection joueur
@@ -726,6 +865,7 @@ class AnalysisWindow(QMainWindow):
         self,
         player_id: int
     ):
+
 
         player = self.database.get_player(
             player_id
@@ -741,44 +881,41 @@ class AnalysisWindow(QMainWindow):
 
 
     # =====================================================
-    # Quart temps
-    # =====================================================
-
-    def _on_quarter_changed(
-        self,
-        index: int
-    ):
-
-        self.controller.set_quarter(
-            index + 1
-        )
-
-
-
-    # =====================================================
     # Enregistrement événement classique
     # =====================================================
+
     def _on_event_triggered(
         self,
         event_code: str
     ):
 
+
         player_id = self.player_panel.selected_player_id()
 
+
+
         if player_id is None:
+
             QMessageBox.warning(
                 self,
                 "Aucune joueuse",
                 "Sélectionnez une joueuse avant d'ajouter un événement."
             )
+
             return
 
 
+
         self.controller.record_event(
+
             player_id,
+
             self.video_panel.current_timestamp(),
+
             event_code
+
         )
+
 
 
         self._refresh_data()
@@ -786,8 +923,9 @@ class AnalysisWindow(QMainWindow):
 
 
     # =====================================================
-    # Enregistrement d'un tir avec coordonnées
+    # Enregistrement tir
     # =====================================================
+
     def _on_shot_clicked(
         self,
         x: float,
@@ -795,10 +933,13 @@ class AnalysisWindow(QMainWindow):
         missed: bool
     ):
 
+
         player_id = self.player_panel.selected_player_id()
 
 
+
         if player_id is None:
+
 
             QMessageBox.warning(
                 self,
@@ -810,10 +951,84 @@ class AnalysisWindow(QMainWindow):
 
 
 
+        # -------------------------
+        # Vérification équipe
+        # -------------------------
+
+        is_home = any(
+
+            p.id == player_id
+
+            for p in self.home_players
+
+        )
+
+
+
+        home_attacks_right = (
+
+            self._current_home_attacks_right()
+
+        )
+
+
+
+        team_attacks_right = (
+
+            home_attacks_right
+
+            if is_home
+
+            else not home_attacks_right
+
+        )
+
+
+
+        click_is_right = x >= 0.5
+
+
+
+        if click_is_right != team_attacks_right:
+
+
+            side_label = (
+
+                "droite"
+
+                if team_attacks_right
+
+                else "gauche"
+
+            )
+
+
+
+            QMessageBox.warning(
+
+                self,
+
+                "Mauvais côté du terrain",
+
+                f"Cette joueuse attaque le panier de {side_label}. "
+                "Cliquez de ce côté du terrain pour enregistrer le tir."
+
+            )
+
+
+            return
+
+
+
+        # -------------------------
+        # Valeur du tir
+        # -------------------------
+
         shot_value = self.shot_chart.shot_value(
             x,
             y
         )
+
 
 
         if missed:
@@ -833,25 +1048,24 @@ class AnalysisWindow(QMainWindow):
             )
 
 
-        print(
-            "TIR:",
-            event_type,
-            x,
-            y
-        )
-
 
         self.controller.record_event(
+
             player_id,
+
             self.video_panel.current_timestamp(),
+
             event_type,
+
             x,
+
             y
+
         )
+
 
 
         self._refresh_data()
-
 
     # =====================================================
     # Annulation dernier événement
@@ -863,48 +1077,117 @@ class AnalysisWindow(QMainWindow):
 
         self._refresh_data()
 
-    def _on_delete_event(self, event_id: int):
 
-        self.database.delete_event(event_id)
+
+    # =====================================================
+    # Suppression événement Play by Play
+    # =====================================================
+
+    def _on_delete_event(
+        self,
+        event_id: int
+    ):
+
+        self.database.delete_event(
+            event_id
+        )
 
         self._refresh_data()
 
-    def _on_edit_event(self, event_id: int):
-        """Ouvre la boîte de dialogue de correction pour l'événement choisi."""
+
+
+    # =====================================================
+    # Modification événement Play by Play
+    # =====================================================
+
+    def _on_edit_event(
+        self,
+        event_id: int
+    ):
+
+        """
+        Ouvre la fenêtre de modification d'un événement.
+        """
 
         event = next(
-            (e for e in self.controller.get_events() if e.id == event_id),
+            (
+                e
+                for e in self.controller.get_events()
+                if e.id == event_id
+            ),
             None
         )
 
+
         if event is None:
+
             return
 
-        dialog = EditEventDialog(event, self._all_players, self)
+
+
+        dialog = EditEventDialog(
+            event,
+            self._all_players,
+            self
+        )
+
 
         if dialog.exec() != EditEventDialog.DialogCode.Accepted:
+
             return
+
+
 
         player_id, event_type = dialog.result_values()
 
+
+
         if player_id is None or event_type is None:
+
             return
 
-        self.database.update_event(event_id, player_id, event_type)
+
+
+        self.database.update_event(
+            event_id,
+            player_id,
+            event_type
+        )
+
 
         self._refresh_data()
 
-    def _on_seek_from_playbyplay(self, timestamp: float):
-        """Ramène la vidéo 5 secondes avant l'événement double-cliqué,
-        pour avoir le contexte de l'action plutôt que son tout dernier
-        instant, et bascule sur l'onglet vidéo pour la voir immédiatement.
+
+
+    # =====================================================
+    # Double clic Play by Play
+    # =====================================================
+
+    def _on_seek_from_playbyplay(
+        self,
+        timestamp: float
+    ):
+
+        """
+        Retourne dans la vidéo quelques secondes avant l'action.
         """
 
-        target = max(0.0, timestamp - 5.0)
+        target = max(
+            0.0,
+            timestamp - 5.0
+        )
 
-        self.video_panel.seek(target)
 
-        self.tabs.setCurrentIndex(0)
+        self.video_panel.seek(
+            target
+        )
+
+
+        # Retour automatique dans l'onglet analyse
+        self.tabs.setCurrentIndex(
+            0
+        )
+
 
 
     # =====================================================
@@ -914,10 +1197,15 @@ class AnalysisWindow(QMainWindow):
     def _on_export_csv(self):
 
         path, _ = QFileDialog.getSaveFileName(
+
             self,
+
             "Exporter CSV",
+
             "evenements.csv",
+
             "CSV (*.csv)"
+
         )
 
 
@@ -926,19 +1214,29 @@ class AnalysisWindow(QMainWindow):
             return
 
 
+
         events = self.controller.get_events()
 
 
+
         players = {
+
             p.id: p
+
             for p in self._all_players
+
         }
 
 
+
         export_events_to_csv(
+
             path,
+
             events,
+
             players
+
         )
 
 
@@ -949,23 +1247,37 @@ class AnalysisWindow(QMainWindow):
 
     def _refresh_data(self):
 
+
         events = self.controller.get_events()
 
 
+
         players = {
+
             p.id: p
+
             for p in self._all_players
+
         }
 
 
+
         self.playbyplay_panel.refresh(
+
             events,
+
             players
+
         )
 
 
+
         self.stats_panel.refresh(
+
             self.home_players,
+
             self.away_players,
+
             self.controller.get_player_stats()
+
         )
