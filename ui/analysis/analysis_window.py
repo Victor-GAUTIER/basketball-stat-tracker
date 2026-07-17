@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import List
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QKeySequence, QShortcut, QAction
 from PySide6.QtWidgets import (
     QFileDialog,
@@ -80,6 +80,10 @@ class AnalysisWindow(QMainWindow):
 
 
         self._shortcuts = []
+
+
+        # Référence vers le popup temporaire actuellement affiché
+        self._toast_label = None
 
 
         game = self.controller.get_game()
@@ -726,6 +730,116 @@ class AnalysisWindow(QMainWindow):
 
 
     # =====================================================
+    # Popup temporaire (toast)
+    # =====================================================
+
+    def _show_toast(
+        self,
+        message: str,
+        duration_ms: int = 3000
+    ):
+
+        """
+        Affiche un petit bandeau semi-transparent en haut de la fenêtre
+        pendant `duration_ms` millisecondes, sans bloquer l'interface.
+        """
+
+        # Si un toast est déjà affiché, on le retire immédiatement
+        if self._toast_label is not None:
+
+            self._toast_label.deleteLater()
+
+            self._toast_label = None
+
+
+        toast = QLabel(
+            message,
+            self
+        )
+
+
+        toast.setStyleSheet(
+            "background-color: rgba(30, 30, 30, 220);"
+            "color: white;"
+            "font-weight: bold;"
+            "font-size: 14px;"
+            "padding: 10px 18px;"
+            "border-radius: 8px;"
+        )
+
+
+        toast.setAlignment(
+            Qt.AlignmentFlag.AlignCenter
+        )
+
+
+        toast.adjustSize()
+
+
+        x = (self.width() - toast.width()) // 2
+
+        y = 40
+
+
+        toast.move(
+            x,
+            y
+        )
+
+
+        toast.show()
+
+        toast.raise_()
+
+
+        self._toast_label = toast
+
+
+        QTimer.singleShot(
+            duration_ms,
+            lambda: self._hide_toast(toast)
+        )
+
+
+
+    def _hide_toast(
+        self,
+        toast: QLabel
+    ):
+
+        # On ne supprime que si c'est toujours le toast actif
+        # (évite de supprimer un toast plus récent par erreur)
+        if self._toast_label is toast:
+
+            self._toast_label = None
+
+
+        toast.deleteLater()
+
+
+
+    def _event_label(
+        self,
+        event_code: str
+    ) -> str:
+
+        """
+        Retourne le libellé lisible d'un code événement classique
+        (ex: "REB", "FAUTE", ...), défini dans EVENT_TYPES.
+        """
+
+        for code, label, key in EVENT_TYPES:
+
+            if code == event_code:
+
+                return label
+
+
+        return event_code
+
+
+
+    # =====================================================
     # Chargement du match
     # =====================================================
 
@@ -918,6 +1032,24 @@ class AnalysisWindow(QMainWindow):
 
 
 
+        player = self.database.get_player(
+            player_id
+        )
+
+
+        if player:
+
+            label = self._event_label(
+                event_code
+            )
+
+
+            self._show_toast(
+                f"#{player.number} {player.name} : {label}"
+            )
+
+
+
         self._refresh_data()
 
 
@@ -1062,6 +1194,40 @@ class AnalysisWindow(QMainWindow):
             y
 
         )
+
+
+
+        player = self.database.get_player(
+            player_id
+        )
+
+
+        if player:
+
+            points = shot_value.replace(
+                "PTS",
+                ""
+            )
+
+
+            if missed:
+
+                message = (
+                    f"#{player.number} {player.name} "
+                    f"a manqué un tir à {points} points"
+                )
+
+            else:
+
+                message = (
+                    f"#{player.number} {player.name} "
+                    f"a marqué {points} points"
+                )
+
+
+            self._show_toast(
+                message
+            )
 
 
 
