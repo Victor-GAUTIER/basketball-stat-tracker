@@ -164,11 +164,28 @@ class AnalysisWindow(QMainWindow):
         # -------------------------
         # Partie vidéo
         # -------------------------
-
         video_container = QWidget()
 
         video_layout = QVBoxLayout(
             video_container
+        )
+
+
+        self.score_label = QLabel(
+            "0 - 0",
+            self
+        )
+
+        self.score_label.setAlignment(
+            Qt.AlignmentFlag.AlignCenter
+        )
+
+        self.score_label.setStyleSheet(
+            "font-size: 22px; font-weight: bold; padding: 6px;"
+        )
+
+        video_layout.addWidget(
+            self.score_label
         )
 
 
@@ -692,6 +709,31 @@ class AnalysisWindow(QMainWindow):
             })
 
         return markers
+
+    def _compute_score(self):
+        """Calcule le score des deux équipes à partir des tirs marqués."""
+
+        home_ids = {p.id for p in self.home_players}
+
+        home_score = 0
+        away_score = 0
+
+        for event in self.controller.get_events():
+
+            if not event.event_type.endswith("_MADE"):
+                continue
+
+            if not event.event_type.startswith(("2PTS_", "3PTS_")):
+                continue
+
+            points = 3 if event.event_type.startswith("3PTS_") else 2
+
+            if event.player_id in home_ids:
+                home_score += points
+            else:
+                away_score += points
+
+        return home_score, away_score
 
     # =====================================================
     # Changer de match
@@ -1544,4 +1586,10 @@ class AnalysisWindow(QMainWindow):
 
         self.shot_chart_summary_panel.set_shots(
             self._compute_shot_markers()
+        )
+
+        home_score, away_score = self._compute_score()
+
+        self.score_label.setText(
+            f"{home_name}  {home_score} - {away_score}  {away_name}"
         )

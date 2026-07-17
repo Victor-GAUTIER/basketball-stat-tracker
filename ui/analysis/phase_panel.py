@@ -93,6 +93,8 @@ class PhasePanel(QWidget):
 
         self.system_combo.clear()
 
+        self.system_combo.addItem("")
+
         self.system_combo.addItems(
             PHASES.get(
                 phase,
@@ -118,4 +120,4 @@ class PhasePanel(QWidget):
 
     def current_system(self):
 
-        return self.system_combo.currentText()
+        return self.system_combo.currentText().strip() or None

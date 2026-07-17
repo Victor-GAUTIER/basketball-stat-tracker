@@ -197,6 +197,11 @@ class Database:
         )
         self.connection.commit()
 
+    def delete_team(self, team_id: int) -> None:
+        """Supprime une équipe (et en cascade ses joueurs et ses liens aux matchs)."""
+        self.connection.execute("DELETE FROM teams WHERE id = ?", (team_id,))
+        self.connection.commit()
+
     # ------------------------------------------------------------------
     # Matchs
     # ------------------------------------------------------------------
