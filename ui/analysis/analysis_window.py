@@ -379,6 +379,9 @@ class AnalysisWindow(QMainWindow):
             self._on_player_selected
         )
 
+        self.player_panel.team_name_changed.connect(self._on_team_name_changed)
+        self.player_panel.player_edited.connect(self._on_player_edited)
+
 
         self.event_panel.event_triggered.connect(
             self._on_event_triggered
@@ -1058,7 +1061,17 @@ class AnalysisWindow(QMainWindow):
                 f"Joueuse sélectionnée : #{player.number} {player.name}"
             )
 
+    def _on_team_name_changed(self, is_home: bool, new_name: str):
+        team = self.home_team if is_home else self.away_team
+        if team is None or new_name == team.name:
+            return
 
+        self.database.update_team(team.id, new_name)
+        self._load_game_data()
+
+    def _on_player_edited(self, player_id: int, name: str, number: int):
+        self.database.update_player(player_id, name, number)
+        self._load_game_data()
 
     # =====================================================
     # Enregistrement événement classique

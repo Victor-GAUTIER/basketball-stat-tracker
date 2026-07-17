@@ -190,6 +190,13 @@ class Database:
 
         self.connection.commit()
 
+    def update_team(self, team_id: int, name: str) -> None:
+        """Modifie le nom d'une équipe."""
+        self.connection.execute(
+            "UPDATE teams SET name = ? WHERE id = ?", (name, team_id)
+        )
+        self.connection.commit()
+
     # ------------------------------------------------------------------
     # Matchs
     # ------------------------------------------------------------------
