@@ -49,5 +49,7 @@ class Event:
     timestamp: float  # position dans la vidéo, en secondes
     quarter: int
     event_type: str
+    phase: Optional[str] = None
+    system: Optional[str] = None
     x: Optional[float] = None
     y: Optional[float] = None

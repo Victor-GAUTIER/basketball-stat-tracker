@@ -61,8 +61,13 @@ CREATE TABLE IF NOT EXISTS events (
     timestamp  REAL NOT NULL,
     quarter    INTEGER NOT NULL,
     event_type TEXT NOT NULL,
+
+    phase      TEXT,
+    system     TEXT,
+
     x          REAL,
     y          REAL,
+
     FOREIGN KEY (game_id) REFERENCES games (id) ON DELETE CASCADE,
     FOREIGN KEY (player_id) REFERENCES players (id) ON DELETE CASCADE
 );
@@ -265,15 +270,42 @@ class Database:
         timestamp: float,
         quarter: int,
         event_type: str,
+        phase: Optional[str] = None,
+        system: Optional[str] = None,
         x: Optional[float] = None,
         y: Optional[float] = None,
     ) -> int:
+
         cur = self.connection.execute(
-            "INSERT INTO events (game_id, player_id, timestamp, quarter, "
-            "event_type, x, y) VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (game_id, player_id, timestamp, quarter, event_type, x, y),
+            """
+            INSERT INTO events (
+                game_id,
+                player_id,
+                timestamp,
+                quarter,
+                event_type,
+                phase,
+                system,
+                x,
+                y
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                game_id,
+                player_id,
+                timestamp,
+                quarter,
+                event_type,
+                phase,
+                system,
+                x,
+                y,
+            ),
         )
+
         self.connection.commit()
+
         return int(cur.lastrowid)
 
     def delete_event(self, event_id: int) -> None:
@@ -295,7 +327,7 @@ class Database:
 
     def get_events_for_game(self, game_id: int) -> List[Event]:
         cur = self.connection.execute(
-            "SELECT id, game_id, player_id, timestamp, quarter, event_type, x, y "
+            "SELECT id, game_id, player_id, timestamp, quarter, event_type, phase, system, x, y "
             "FROM events WHERE game_id = ? ORDER BY timestamp",
             (game_id,),
         )
@@ -307,6 +339,8 @@ class Database:
                 timestamp=r["timestamp"],
                 quarter=r["quarter"],
                 event_type=r["event_type"],
+                phase=r["phase"],
+                system=r["system"],
                 x=r["x"],
                 y=r["y"],
             )
@@ -315,7 +349,7 @@ class Database:
 
     def get_last_event_for_game(self, game_id: int) -> Optional[Event]:
         cur = self.connection.execute(
-            "SELECT id, game_id, player_id, timestamp, quarter, event_type, x, y "
+            "SELECT id, game_id, player_id, timestamp, quarter, event_type, phase, system, x, y "
             "FROM events WHERE game_id = ? ORDER BY id DESC LIMIT 1",
             (game_id,),
         )
@@ -329,6 +363,8 @@ class Database:
             timestamp=r["timestamp"],
             quarter=r["quarter"],
             event_type=r["event_type"],
+            phase=r["phase"],
+            system=r["system"],
             x=r["x"],
             y=r["y"],
         )

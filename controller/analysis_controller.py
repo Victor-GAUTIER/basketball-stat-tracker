@@ -81,7 +81,6 @@ class AnalysisController:
         return self.current_quarter
 
 
-
     # =====================================================
     # Enregistrement des événements
     # =====================================================
@@ -91,16 +90,22 @@ class AnalysisController:
         player_id: int,
         timestamp: float,
         event_type: str,
+        *,
+        phase: Optional[str] = None,
+        system: Optional[str] = None,
         x: Optional[float] = None,
         y: Optional[float] = None,
     ) -> Event:
         """
         Ajoute un événement dans la base.
 
+        phase et system décrivent la situation de jeu :
+        - phase : Contre attaque, Transition, Attaque placée, Touche...
+        - system : système associé (Ghost, Flash, Poing...)
+
         x et y sont utilisés pour les tirs afin de construire
         le shot chart.
         """
-
 
         event_id = self.database.add_event(
             game_id=self.game_id,
@@ -108,10 +113,11 @@ class AnalysisController:
             timestamp=timestamp,
             quarter=self.current_quarter,
             event_type=event_type,
+            phase=phase,
+            system=system,
             x=x,
             y=y,
         )
-
 
         return Event(
             id=event_id,
@@ -120,32 +126,11 @@ class AnalysisController:
             timestamp=timestamp,
             quarter=self.current_quarter,
             event_type=event_type,
+            phase=phase,
+            system=system,
             x=x,
             y=y,
         )
-
-
-
-    def undo_last_event(self) -> Optional[Event]:
-        """
-        Supprime le dernier événement enregistré.
-        """
-
-        last_event = self.database.get_last_event_for_game(
-            self.game_id
-        )
-
-
-        if last_event is None or last_event.id is None:
-            return None
-
-
-        self.database.delete_event(
-            last_event.id
-        )
-
-
-        return last_event
 
 
 

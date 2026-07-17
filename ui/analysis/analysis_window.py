@@ -36,6 +36,7 @@ from ui.analysis.shot_chart_widget import ShotChartWidget
 from ui.analysis.play_by_play_panel import PlayByPlayPanel
 from ui.analysis.edit_event_dialog import EditEventDialog
 from ui.analysis.shot_map_widget import ShotChartSummaryPanel
+from ui.analysis.phase_panel import PhasePanel
 
 
 
@@ -179,6 +180,14 @@ class AnalysisWindow(QMainWindow):
         video_layout.addWidget(
             self.video_panel,
             stretch=8
+        )
+
+        self.phase_panel = PhasePanel(
+            self
+        )
+
+        video_layout.addWidget(
+            self.phase_panel
         )
 
 
@@ -1075,15 +1084,15 @@ class AnalysisWindow(QMainWindow):
             return
 
 
+        phase = self.phase_panel.current_phase()
+        system = self.phase_panel.current_system()
 
         self.controller.record_event(
-
             player_id,
-
             self.video_panel.current_timestamp(),
-
-            event_code
-
+            event_code,
+            phase=phase,
+            system=system,
         )
 
 
@@ -1103,7 +1112,6 @@ class AnalysisWindow(QMainWindow):
             self._show_toast(
                 f"#{player.number} {player.name} : {label}"
             )
-
 
 
         self._refresh_data()
@@ -1237,18 +1245,15 @@ class AnalysisWindow(QMainWindow):
 
 
 
+        phase = self.phase_panel.current_phase()
+        system = self.phase_panel.current_system()
+
         self.controller.record_event(
-
             player_id,
-
             self.video_panel.current_timestamp(),
-
             event_type,
-
-            x,
-
-            y
-
+            phase=phase,
+            system=system
         )
 
 
