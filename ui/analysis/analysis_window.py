@@ -35,6 +35,7 @@ from ui.analysis.stats_panel import StatsPanel
 from ui.analysis.shot_chart_widget import ShotChartWidget
 from ui.analysis.play_by_play_panel import PlayByPlayPanel
 from ui.analysis.edit_event_dialog import EditEventDialog
+from ui.analysis.shot_map_widget import ShotChartSummaryPanel
 
 
 
@@ -77,7 +78,6 @@ class AnalysisWindow(QMainWindow):
 
         # True = équipe domicile attaque le panier de droite
         self.home_attacks_right = True
-
 
         self._shortcuts = []
 
@@ -375,7 +375,20 @@ class AnalysisWindow(QMainWindow):
             self._on_event_triggered
         )
 
+        # =========================
+        # ONGLET SHOT CHART
+        # =========================
 
+        self.shot_chart_summary_panel = ShotChartSummaryPanel(
+            "assets/court.svg",
+            self
+        )
+
+
+        self.tabs.addTab(
+            self.shot_chart_summary_panel,
+            "Shot chart"
+        )
 
         # =========================
         # ONGLET PLAY BY PLAY
@@ -610,7 +623,62 @@ class AnalysisWindow(QMainWindow):
             away_name,
         )
 
+    # =====================================================
+    # Shot chart récapitulatif
+    # =====================================================
 
+    def _compute_shot_markers(self):
+
+        """
+        Construit la liste des tirs à afficher sur l'onglet Shot chart.
+        Chaque équipe est toujours affichée du même côté : les tirs pris
+        après le changement de camp (à partir du 3e quart-temps) sont donc
+        symétrisés horizontalement pour rester cohérents avec les tirs des
+        deux premiers quarts-temps.
+        """
+
+        home_ids = {
+            p.id
+            for p in self.home_players
+        }
+
+        markers = []
+
+        for event in self.controller.get_events():
+
+            if event.x is None or event.y is None:
+                continue
+
+            if not event.event_type.startswith(("2PTS_", "3PTS_")):
+                continue
+
+            is_home = event.player_id in home_ids
+
+            canonical_right = (
+                self.home_attacks_right
+                if is_home
+                else not self.home_attacks_right
+            )
+
+            attacked_right_then = (
+                canonical_right
+                if event.quarter <= 2
+                else not canonical_right
+            )
+
+            x = event.x
+
+            if attacked_right_then != canonical_right:
+                x = 1.0 - x
+
+            markers.append({
+                "x": x,
+                "y": event.y,
+                "made": event.event_type.endswith("_MADE"),
+                "is_home": is_home,
+            })
+
+        return markers
 
     # =====================================================
     # Changer de match
@@ -1446,4 +1514,25 @@ class AnalysisWindow(QMainWindow):
 
             self.controller.get_player_stats()
 
+        )
+
+        home_name = (
+            self.home_team.name
+            if self.home_team
+            else "Domicile"
+        )
+
+        away_name = (
+            self.away_team.name
+            if self.away_team
+            else "Extérieur"
+        )
+
+        self.shot_chart_summary_panel.set_team_labels(
+            home_name,
+            away_name
+        )
+
+        self.shot_chart_summary_panel.set_shots(
+            self._compute_shot_markers()
         )
