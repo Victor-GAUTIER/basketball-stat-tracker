@@ -123,6 +123,18 @@ class Database:
         cur = self.connection.execute("SELECT id, name FROM teams ORDER BY name")
         return [Team(id=r["id"], name=r["name"]) for r in cur.fetchall()]
 
+    def update_team(self, team_id: int, name: str) -> None:
+        """Modifie le nom d'une équipe."""
+        self.connection.execute(
+            "UPDATE teams SET name = ? WHERE id = ?", (name, team_id)
+        )
+        self.connection.commit()
+
+    def delete_team(self, team_id: int) -> None:
+        """Supprime une équipe (et en cascade ses joueurs et ses liens aux matchs)."""
+        self.connection.execute("DELETE FROM teams WHERE id = ?", (team_id,))
+        self.connection.commit()
+
     # ------------------------------------------------------------------
     # Joueurs
     # ------------------------------------------------------------------
@@ -188,18 +200,6 @@ class Database:
             (name, number, player_id)
         )
 
-        self.connection.commit()
-
-    def update_team(self, team_id: int, name: str) -> None:
-        """Modifie le nom d'une équipe."""
-        self.connection.execute(
-            "UPDATE teams SET name = ? WHERE id = ?", (name, team_id)
-        )
-        self.connection.commit()
-
-    def delete_team(self, team_id: int) -> None:
-        """Supprime une équipe (et en cascade ses joueurs et ses liens aux matchs)."""
-        self.connection.execute("DELETE FROM teams WHERE id = ?", (team_id,))
         self.connection.commit()
 
     # ------------------------------------------------------------------
@@ -324,16 +324,22 @@ class Database:
         self.connection.execute("DELETE FROM events WHERE id = ?", (event_id,))
         self.connection.commit()
 
-    def update_event(self, event_id: int, player_id: int, event_type: str) -> None:
-        """Corrige la joueuse et/ou le type d'un événement déjà enregistré.
+    def update_event(
+        self,
+        event_id: int,
+        player_id: int,
+        event_type: str,
+        phase: Optional[str] = None,
+        system: Optional[str] = None,
+    ) -> None:
+        """Corrige la joueuse, le type, la phase et/ou le système d'un événement.
 
-        Le timestamp, le quart-temps et les coordonnées x/y ne sont pas
-        modifiés : seule une erreur de saisie (mauvaise joueuse ou mauvais
-        type d'action) est corrigée ici, pas le moment de l'action.
+        Le timestamp et le quart-temps ne sont pas modifiés : ils restent liés
+        au moment réel où l'action a été cliquée pendant l'analyse vidéo.
         """
         self.connection.execute(
-            "UPDATE events SET player_id = ?, event_type = ? WHERE id = ?",
-            (player_id, event_type, event_id),
+            "UPDATE events SET player_id = ?, event_type = ?, phase = ?, system = ? WHERE id = ?",
+            (player_id, event_type, phase, system, event_id),
         )
         self.connection.commit()
 

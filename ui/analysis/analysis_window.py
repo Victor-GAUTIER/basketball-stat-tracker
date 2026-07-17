@@ -1421,24 +1421,19 @@ class AnalysisWindow(QMainWindow):
 
             return
 
-
-
-        player_id, event_type = dialog.result_values()
-
-
+        player_id, event_type, phase, system = dialog.result_values()
 
         if player_id is None or event_type is None:
 
             return
 
-
-
         self.database.update_event(
             event_id,
             player_id,
-            event_type
+            event_type,
+            phase,
+            system,
         )
-
 
         self._refresh_data()
 
