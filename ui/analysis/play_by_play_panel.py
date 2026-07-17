@@ -222,14 +222,6 @@ class PlayByPlayPanel(QWidget):
 
         self.table.resizeColumnsToContents()
 
-        print(
-            event.event_type,
-            event.phase,
-            event.system,
-            event.x,
-            event.y
-        )
-
 
 
     def _on_double_click(

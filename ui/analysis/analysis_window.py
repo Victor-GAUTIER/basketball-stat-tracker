@@ -685,6 +685,7 @@ class AnalysisWindow(QMainWindow):
                 "y": event.y,
                 "made": event.event_type.endswith("_MADE"),
                 "is_home": is_home,
+                "player_id": event.player_id,
             })
 
         return markers
@@ -1027,7 +1028,7 @@ class AnalysisWindow(QMainWindow):
 
         )
 
-
+        self.shot_chart_summary_panel.set_players(self._all_players)
 
         self._refresh_data()
 
@@ -1253,7 +1254,9 @@ class AnalysisWindow(QMainWindow):
             self.video_panel.current_timestamp(),
             event_type,
             phase=phase,
-            system=system
+            system=system,
+            x=x,
+            y=y
         )
 
 
