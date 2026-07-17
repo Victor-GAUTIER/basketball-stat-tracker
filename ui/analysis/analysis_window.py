@@ -756,18 +756,6 @@ class AnalysisWindow(QMainWindow):
             ],
 
 
-
-            (
-                "Ctrl+Z",
-                self._on_undo_event
-            ),
-
-
-            (
-                "Ctrl+E",
-                self._on_export_csv
-            ),
-
         ]
 
 
@@ -782,7 +770,7 @@ class AnalysisWindow(QMainWindow):
 
 
             shortcut.setContext(
-                Qt.ShortcutContext.ApplicationShortcut
+                Qt.ShortcutContext.WindowShortcut
             )
 
 

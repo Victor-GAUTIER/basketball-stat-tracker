@@ -70,6 +70,12 @@ class EventPanel(QWidget):
             )
 
 
+            # Empêche le bouton de voler le focus au clavier
+            button.setFocusPolicy(
+                Qt.FocusPolicy.NoFocus
+            )
+
+
             button.clicked.connect(
                 lambda checked=False,
                 c=code:
@@ -87,27 +93,4 @@ class EventPanel(QWidget):
                 button,
                 row,
                 col
-            )
-
-
-
-            sc = QShortcut(
-                QKeySequence(shortcut),
-                self
-            )
-
-
-            sc.setContext(
-                Qt.ShortcutContext.ApplicationShortcut
-            )
-
-
-            sc.activated.connect(
-                lambda c=code:
-                self.event_triggered.emit(c)
-            )
-
-
-            self._shortcuts.append(
-                sc
             )
