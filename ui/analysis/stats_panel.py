@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from typing import Dict, List, Any, Optional
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
+    QAbstractItemView,
+    QFrame,
     QLabel,
     QTableWidget,
     QTableWidgetItem,
@@ -15,8 +18,25 @@ from PySide6.QtWidgets import (
 from data.models import Player
 
 
+HEADERS = [
+    "Joueur",
+    "PTS",
+    "FG",
+    "3PT",
+    "FT",
+    "REB",
+    "AST",
+    "TO",
+    "STL",
+    "BLK",
+    "OREB",
+    "DREB",
+    "PF",
+]
+
+
 class StatsPanel(QWidget):
-    """Affiche les boxscores des deux équipes."""
+    """Affiche les boxscores des deux équipes, avec une ligne TOTAL toujours visible."""
 
     def __init__(
         self,
@@ -49,7 +69,7 @@ class StatsPanel(QWidget):
 
 
         # =============================
-        # Tableaux
+        # Tableaux joueurs (scrollables)
         # =============================
 
         self.home_table = QTableWidget(
@@ -71,6 +91,39 @@ class StatsPanel(QWidget):
 
 
         # =============================
+        # Lignes TOTAL (figées, non scrollables)
+        # =============================
+
+        self.home_total_table = QTableWidget(
+            self
+        )
+
+        self.away_total_table = QTableWidget(
+            self
+        )
+
+
+        self._configure_total_table(
+            self.home_total_table
+        )
+
+        self._configure_total_table(
+            self.away_total_table
+        )
+
+
+        self._sync_column_widths(
+            self.home_table,
+            self.home_total_table
+        )
+
+        self._sync_column_widths(
+            self.away_table,
+            self.away_total_table
+        )
+
+
+        # =============================
         # Layout vertical
         # =============================
 
@@ -79,12 +132,42 @@ class StatsPanel(QWidget):
         )
 
 
+        home_tables = QVBoxLayout()
+
+        home_tables.setSpacing(
+            0
+        )
+
+        home_tables.addWidget(
+            self.home_table
+        )
+
+        home_tables.addWidget(
+            self.home_total_table
+        )
+
+
+        away_tables = QVBoxLayout()
+
+        away_tables.setSpacing(
+            0
+        )
+
+        away_tables.addWidget(
+            self.away_table
+        )
+
+        away_tables.addWidget(
+            self.away_total_table
+        )
+
+
         layout.addWidget(
             self.home_title
         )
 
-        layout.addWidget(
-            self.home_table
+        layout.addLayout(
+            home_tables
         )
 
 
@@ -92,13 +175,13 @@ class StatsPanel(QWidget):
             self.away_title
         )
 
-        layout.addWidget(
-            self.away_table
+        layout.addLayout(
+            away_tables
         )
 
 
     # =====================================================
-    # Configuration tableau
+    # Configuration tableau joueurs
     # =====================================================
 
     def _configure_table(
@@ -106,29 +189,12 @@ class StatsPanel(QWidget):
         table: QTableWidget
     ) -> None:
 
-        headers = [
-            "Joueur",
-            "PTS",
-            "FG",
-            "3PT",
-            "FT",
-            "REB",
-            "AST",
-            "TO",
-            "STL",
-            "BLK",
-            "OREB",
-            "DREB",
-            "PF",
-        ]
-
-
         table.setColumnCount(
-            len(headers)
+            len(HEADERS)
         )
 
         table.setHorizontalHeaderLabels(
-            headers
+            HEADERS
         )
 
 
@@ -141,6 +207,92 @@ class StatsPanel(QWidget):
             True
         )
 
+        table.setFrameShape(
+            QFrame.Shape.NoFrame
+        )
+
+
+    # =====================================================
+    # Configuration ligne TOTAL figée
+    # =====================================================
+
+    def _configure_total_table(
+        self,
+        table: QTableWidget
+    ) -> None:
+
+        table.setColumnCount(
+            len(HEADERS)
+        )
+
+        table.setRowCount(
+            1
+        )
+
+        table.horizontalHeader().setVisible(
+            False
+        )
+
+        table.verticalHeader().setVisible(
+            False
+        )
+
+        table.setSortingEnabled(
+            False
+        )
+
+        table.setEditTriggers(
+            QAbstractItemView.EditTrigger.NoEditTriggers
+        )
+
+        table.setSelectionMode(
+            QAbstractItemView.SelectionMode.NoSelection
+        )
+
+        table.setVerticalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
+
+        table.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
+
+        row_height = table.verticalHeader().defaultSectionSize()
+
+        table.setFixedHeight(
+            row_height + 6
+        )
+
+        table.setStyleSheet(
+            "font-weight: bold; border-top: 2px solid gray;"
+        )
+
+        table.setFrameShape(
+            QFrame.Shape.NoFrame
+        )
+
+
+    # =====================================================
+    # Synchronisation des largeurs de colonnes
+    # =====================================================
+
+    def _sync_column_widths(
+        self,
+        table: QTableWidget,
+        total_table: QTableWidget
+    ) -> None:
+
+        def sync(index, old_size, new_size):
+
+            total_table.setColumnWidth(
+                index,
+                new_size
+            )
+
+        table.horizontalHeader().sectionResized.connect(
+            sync
+        )
+
 
     # =====================================================
     # Actualisation
@@ -150,12 +302,27 @@ class StatsPanel(QWidget):
         self,
         home_players: List[Player],
         away_players: List[Player],
-        stats: Dict[int, Dict[str, Any]]
+        stats: Dict[int, Dict[str, Any]],
+        home_name: Optional[str] = None,
+        away_name: Optional[str] = None
     ) -> None:
+
+        if home_name:
+
+            self.home_title.setText(
+                home_name
+            )
+
+        if away_name:
+
+            self.away_title.setText(
+                away_name
+            )
 
 
         self._fill_table(
             self.home_table,
+            self.home_total_table,
             home_players,
             stats
         )
@@ -163,6 +330,7 @@ class StatsPanel(QWidget):
 
         self._fill_table(
             self.away_table,
+            self.away_total_table,
             away_players,
             stats
         )
@@ -175,6 +343,7 @@ class StatsPanel(QWidget):
     def _fill_table(
         self,
         table: QTableWidget,
+        total_table: QTableWidget,
         players: List[Player],
         stats: Dict[int, Dict[str, Any]]
     ) -> None:
@@ -183,9 +352,8 @@ class StatsPanel(QWidget):
         table.clearContents()
 
 
-        # +1 pour la ligne TOTAL
         table.setRowCount(
-            len(players) + 1
+            len(players)
         )
 
 
@@ -214,7 +382,6 @@ class StatsPanel(QWidget):
                 player.id,
                 {}
             )
-            print(player.name, player_stats)
 
 
             pts = (
@@ -362,9 +529,11 @@ class StatsPanel(QWidget):
             totals["PF"] += foul
 
 
+        table.resizeColumnsToContents()
+
 
         # =============================
-        # Ligne total équipe
+        # Ligne total équipe (table figée)
         # =============================
 
         total_values = [
@@ -396,20 +565,21 @@ class StatsPanel(QWidget):
         ]
 
 
-        total_row = len(players)
-
-
         for col, value in enumerate(total_values):
 
             item = QTableWidgetItem(
                 str(value)
             )
 
-            table.setItem(
-                total_row,
+            total_table.setItem(
+                0,
                 col,
                 item
             )
 
-
-        table.resizeColumnsToContents()
+            # Largeur initiale alignée sur la table joueurs, au cas où
+            # le signal sectionResized n'aurait pas encore été émis.
+            total_table.setColumnWidth(
+                col,
+                table.columnWidth(col)
+            )

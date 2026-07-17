@@ -1550,18 +1550,6 @@ class AnalysisWindow(QMainWindow):
 
         )
 
-
-
-        self.stats_panel.refresh(
-
-            self.home_players,
-
-            self.away_players,
-
-            self.controller.get_player_stats()
-
-        )
-
         home_name = (
             self.home_team.name
             if self.home_team
@@ -1572,6 +1560,20 @@ class AnalysisWindow(QMainWindow):
             self.away_team.name
             if self.away_team
             else "Extérieur"
+        )
+
+        self.stats_panel.refresh(
+
+            self.home_players,
+
+            self.away_players,
+
+            self.controller.get_player_stats(),
+
+            home_name,
+
+            away_name
+
         )
 
         self.shot_chart_summary_panel.set_team_labels(
