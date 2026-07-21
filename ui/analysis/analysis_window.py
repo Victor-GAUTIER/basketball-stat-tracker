@@ -720,13 +720,17 @@ class AnalysisWindow(QMainWindow):
 
         for event in self.controller.get_events():
 
-            if not event.event_type.endswith("_MADE"):
-                continue
+            if event.event_type == "FT_MADE":
+                points = 1
 
-            if not event.event_type.startswith(("2PTS_", "3PTS_")):
-                continue
+            elif event.event_type == "2PTS_MADE":
+                points = 2
 
-            points = 3 if event.event_type.startswith("3PTS_") else 2
+            elif event.event_type == "3PTS_MADE":
+                points = 3
+
+            else:
+                continue
 
             if event.player_id in home_ids:
                 home_score += points
@@ -1079,6 +1083,8 @@ class AnalysisWindow(QMainWindow):
 
 
         self._update_shot_chart_orientation()
+
+        self.video_panel.setFocus()
 
 
 
@@ -1540,16 +1546,6 @@ class AnalysisWindow(QMainWindow):
 
         }
 
-
-
-        self.playbyplay_panel.refresh(
-
-            events,
-
-            players
-
-        )
-
         home_name = (
             self.home_team.name
             if self.home_team
@@ -1560,6 +1556,22 @@ class AnalysisWindow(QMainWindow):
             self.away_team.name
             if self.away_team
             else "Extérieur"
+        )
+
+        self.playbyplay_panel.refresh(
+
+            events,
+
+            players,
+
+            self.home_players,
+
+            self.away_players,
+
+            home_name,
+
+            away_name
+
         )
 
         self.stats_panel.refresh(
