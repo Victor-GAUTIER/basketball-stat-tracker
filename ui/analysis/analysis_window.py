@@ -655,16 +655,7 @@ class AnalysisWindow(QMainWindow):
     # =====================================================
     # Shot chart récapitulatif
     # =====================================================
-
     def _compute_shot_markers(self):
-
-        """
-        Construit la liste des tirs à afficher sur l'onglet Shot chart.
-        Chaque équipe est toujours affichée du même côté : les tirs pris
-        après le changement de camp (à partir du 3e quart-temps) sont donc
-        symétrisés horizontalement pour rester cohérents avec les tirs des
-        deux premiers quarts-temps.
-        """
 
         home_ids = {
             p.id
@@ -696,13 +687,18 @@ class AnalysisWindow(QMainWindow):
             )
 
             x = event.x
+            y = event.y
 
             if attacked_right_then != canonical_right:
+                # Symétrie centrale (rotation 180°) : on ramène le tir côté
+                # canonique de l'équipe tout en conservant sa position relative
+                # par rapport à SON panier.
                 x = 1.0 - x
+                y = 1.0 - y
 
             markers.append({
                 "x": x,
-                "y": event.y,
+                "y": y,
                 "made": event.event_type.endswith("_MADE"),
                 "is_home": is_home,
                 "player_id": event.player_id,
