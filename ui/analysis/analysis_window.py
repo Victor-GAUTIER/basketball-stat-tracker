@@ -1549,7 +1549,7 @@ class AnalysisWindow(QMainWindow):
 
             return
 
-        player_id, event_type, phase, system = dialog.result_values()
+        player_id, event_type, quarter, phase, system = dialog.result_values()
 
         if player_id is None or event_type is None:
 
@@ -1559,6 +1559,7 @@ class AnalysisWindow(QMainWindow):
             event_id,
             player_id,
             event_type,
+            quarter,
             phase,
             system,
         )

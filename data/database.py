@@ -329,17 +329,18 @@ class Database:
         event_id: int,
         player_id: int,
         event_type: str,
+        quarter: int,
         phase: Optional[str] = None,
         system: Optional[str] = None,
     ) -> None:
-        """Corrige la joueuse, le type, la phase et/ou le système d'un événement.
+        """Corrige la joueuse, le type, le quart-temps, la phase et/ou le système d'un événement.
 
-        Le timestamp et le quart-temps ne sont pas modifiés : ils restent liés
+        Le timestamp n'est pas modifié : il reste lié
         au moment réel où l'action a été cliquée pendant l'analyse vidéo.
         """
         self.connection.execute(
-            "UPDATE events SET player_id = ?, event_type = ?, phase = ?, system = ? WHERE id = ?",
-            (player_id, event_type, phase, system, event_id),
+            "UPDATE events SET player_id = ?, event_type = ?, quarter = ?, phase = ?, system = ? WHERE id = ?",
+            (player_id, event_type, quarter, phase, system, event_id),
         )
         self.connection.commit()
 
