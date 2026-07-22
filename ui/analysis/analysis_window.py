@@ -37,6 +37,7 @@ from ui.analysis.play_by_play_panel import PlayByPlayPanel
 from ui.analysis.edit_event_dialog import EditEventDialog
 from ui.analysis.shot_map_widget import ShotChartSummaryPanel
 from ui.analysis.phase_panel import PhasePanel
+from ui.analysis.team_comparison_panel import TeamComparisonPanel
 
 
 
@@ -383,6 +384,13 @@ class AnalysisWindow(QMainWindow):
         self.tabs.addTab(
             stats_tab,
             "Statistiques"
+        )
+
+        self.team_comparison_panel = TeamComparisonPanel(self)
+
+        self.tabs.addTab(
+            self.team_comparison_panel,
+            "Comparaison"
         )
 
 
@@ -734,6 +742,124 @@ class AnalysisWindow(QMainWindow):
                 away_score += points
 
         return home_score, away_score
+
+# =====================================================
+    # Comparaison d'équipes (onglet "Comparaison")
+    # =====================================================
+
+    def _compute_quarter_scores(self):
+        """Retourne {quart_temps: (points_domicile, points_exterieur)}."""
+
+        home_ids = {p.id for p in self.home_players}
+
+        quarter_scores = {}
+
+        for event in self.controller.get_events():
+
+            if event.event_type == "FT_MADE":
+                points = 1
+            elif event.event_type == "2PTS_MADE":
+                points = 2
+            elif event.event_type == "3PTS_MADE":
+                points = 3
+            else:
+                continue
+
+            home_pts, away_pts = quarter_scores.get(event.quarter, (0, 0))
+
+            if event.player_id in home_ids:
+                home_pts += points
+            else:
+                away_pts += points
+
+            quarter_scores[event.quarter] = (home_pts, away_pts)
+
+        return quarter_scores
+
+    def _aggregate_team_stats(self, players, stats):
+        """Agrège les stats de tous les joueurs d'une équipe (mêmes clés
+        que celles utilisées par StatsPanel)."""
+
+        totals = {
+            "PTS": 0,
+            "FG_MADE": 0, "FG_ATT": 0,
+            "2PTS_MADE": 0, "2PTS_ATT": 0,
+            "3PTS_MADE": 0, "3PTS_ATT": 0,
+            "FT_MADE": 0, "FT_ATT": 0,
+            "REB": 0, "AST": 0, "TO": 0,
+            "STL": 0, "BLK": 0, "PF": 0,
+        }
+
+        for player in players:
+
+            player_stats = stats.get(player.id, {})
+
+            two_made = player_stats.get("2PTS_MADE", 0)
+            two_att = two_made + player_stats.get("2PTS_MISSED", 0)
+
+            three_made = player_stats.get("3PTS_MADE", 0)
+            three_att = three_made + player_stats.get("3PTS_MISSED", 0)
+
+            ft_made = player_stats.get("FT_MADE", 0)
+            ft_att = ft_made + player_stats.get("FT_MISSED", 0)
+
+            oreb = player_stats.get("OFF_REBOUND", 0)
+            dreb = player_stats.get("DEF_REBOUND", 0)
+
+            totals["PTS"] += two_made * 2 + three_made * 3 + ft_made
+
+            totals["2PTS_MADE"] += two_made
+            totals["2PTS_ATT"] += two_att
+
+            totals["3PTS_MADE"] += three_made
+            totals["3PTS_ATT"] += three_att
+
+            totals["FG_MADE"] += two_made + three_made
+            totals["FG_ATT"] += two_att + three_att
+
+            totals["FT_MADE"] += ft_made
+            totals["FT_ATT"] += ft_att
+
+            totals["REB"] += oreb + dreb
+            totals["AST"] += player_stats.get("ASSIST", 0)
+            totals["TO"] += player_stats.get("TURNOVER", 0)
+            totals["STL"] += player_stats.get("STEAL", 0)
+            totals["BLK"] += player_stats.get("BLOCK", 0)
+            totals["PF"] += player_stats.get("FOUL", 0)
+
+        return totals
+
+    def _compute_leaders(self, players, stats):
+        """Retourne {"PTS": (player, valeur) | None, "REB": ..., "AST": ...}
+        pour l'équipe donnée."""
+
+        best = {"PTS": None, "REB": None, "AST": None}
+
+        for player in players:
+
+            player_stats = stats.get(player.id, {})
+
+            pts = (
+                player_stats.get("2PTS_MADE", 0) * 2
+                + player_stats.get("3PTS_MADE", 0) * 3
+                + player_stats.get("FT_MADE", 0)
+            )
+
+            reb = (
+                player_stats.get("OFF_REBOUND", 0)
+                + player_stats.get("DEF_REBOUND", 0)
+            )
+
+            ast = player_stats.get("ASSIST", 0)
+
+            for key, value in (("PTS", pts), ("REB", reb), ("AST", ast)):
+
+                current = best[key]
+
+                if current is None or value > current[1]:
+                    best[key] = (player, value)
+
+        return best
 
     # =====================================================
     # Changer de match
@@ -1570,18 +1696,30 @@ class AnalysisWindow(QMainWindow):
 
         )
 
+        player_stats = self.controller.get_player_stats()
+
         self.stats_panel.refresh(
 
             self.home_players,
 
             self.away_players,
 
-            self.controller.get_player_stats(),
+            player_stats,
 
             home_name,
 
             away_name
 
+        )
+
+        self.team_comparison_panel.refresh(
+            home_name,
+            away_name,
+            self._compute_quarter_scores(),
+            self._aggregate_team_stats(self.home_players, player_stats),
+            self._aggregate_team_stats(self.away_players, player_stats),
+            self._compute_leaders(self.home_players, player_stats),
+            self._compute_leaders(self.away_players, player_stats),
         )
 
         self.shot_chart_summary_panel.set_team_labels(
