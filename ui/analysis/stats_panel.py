@@ -23,6 +23,7 @@ HEADERS = [
     "PTS",
     "FG",
     "3PT",
+    "eFG%",
     "FT",
     "REB",
     "AST",
@@ -295,6 +296,30 @@ class StatsPanel(QWidget):
 
 
     # =====================================================
+    # Pourcentages
+    # =====================================================
+
+    @staticmethod
+    def _pct(made: int, att: int) -> str:
+
+        if att == 0:
+            return "0%"
+
+        return f"{round(made / att * 100)}%"
+
+
+    @staticmethod
+    def _efg(fg_made: int, three_made: int, fg_att: int) -> int:
+
+        if fg_att == 0:
+            return 0
+
+        return round(
+            (fg_made + 0.5 * three_made) / fg_att * 100
+        )
+
+
+    # =====================================================
     # Actualisation
     # =====================================================
 
@@ -478,11 +503,29 @@ class StatsPanel(QWidget):
             )
 
 
+            fg_pct = self._pct(
+                fg_made,
+                fg_att
+            )
+
+            three_pct = self._pct(
+                three_made,
+                three_att
+            )
+
+            efg = self._efg(
+                fg_made,
+                three_made,
+                fg_att
+            )
+
+
             values = [
                 f"#{player.number} {player.name}",
                 pts,
-                f"{fg_made}/{fg_att}",
-                f"{three_made}/{three_att}",
+                f"{fg_made}/{fg_att} ({fg_pct})",
+                f"{three_made}/{three_att} ({three_pct})",
+                f"{efg}%",
                 f"{ft_made}/{ft_att}",
                 reb,
                 ast,
@@ -536,14 +579,33 @@ class StatsPanel(QWidget):
         # Ligne total équipe (table figée)
         # =============================
 
+        team_fg_pct = self._pct(
+            totals["FG_MADE"],
+            totals["FG_ATT"]
+        )
+
+        team_three_pct = self._pct(
+            totals["3PT_MADE"],
+            totals["3PT_ATT"]
+        )
+
+        team_efg = self._efg(
+            totals["FG_MADE"],
+            totals["3PT_MADE"],
+            totals["FG_ATT"]
+        )
+
+
         total_values = [
             "TOTAL",
 
             totals["PTS"],
 
-            f"{totals['FG_MADE']}/{totals['FG_ATT']}",
+            f"{totals['FG_MADE']}/{totals['FG_ATT']} ({team_fg_pct})",
 
-            f"{totals['3PT_MADE']}/{totals['3PT_ATT']}",
+            f"{totals['3PT_MADE']}/{totals['3PT_ATT']} ({team_three_pct})",
+
+            f"{team_efg}%",
 
             f"{totals['FT_MADE']}/{totals['FT_ATT']}",
 
