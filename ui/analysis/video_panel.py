@@ -1,4 +1,4 @@
-"""Panneau vidéo : lecture/pause, avance/recul et chronomètre."""
+"""Panneau vidéo : lecture/pause, avance/recul, chronomètre et son."""
 
 from __future__ import annotations
 
@@ -125,6 +125,12 @@ class VideoPanel(QWidget):
         )
 
 
+        self.mute_button = QPushButton(
+            "🔊",
+            self
+        )
+
+
         # Les boutons ne prennent pas le focus
         # pour ne pas bloquer les raccourcis
         self.play_pause_button.setFocusPolicy(
@@ -136,6 +142,10 @@ class VideoPanel(QWidget):
         )
 
         self.forward_button.setFocusPolicy(
+            Qt.FocusPolicy.NoFocus
+        )
+
+        self.mute_button.setFocusPolicy(
             Qt.FocusPolicy.NoFocus
         )
 
@@ -151,6 +161,10 @@ class VideoPanel(QWidget):
 
         self.forward_button.setToolTip(
             "Flèche droite : +5 secondes"
+        )
+
+        self.mute_button.setToolTip(
+            "M : Couper / rétablir le son"
         )
 
 
@@ -216,6 +230,11 @@ class VideoPanel(QWidget):
         )
 
 
+        controls.addWidget(
+            self.mute_button
+        )
+
+
 
         layout = QVBoxLayout(
             self
@@ -264,6 +283,11 @@ class VideoPanel(QWidget):
         self.forward_button.clicked.connect(
             lambda:
                 self.seek_relative(5000)
+        )
+
+
+        self.mute_button.clicked.connect(
+            self.toggle_mute
         )
 
 
@@ -369,6 +393,20 @@ class VideoPanel(QWidget):
         else:
 
             self.player.play()
+
+
+
+    def toggle_mute(self):
+
+        muted = not self.audio_output.isMuted()
+
+        self.audio_output.setMuted(
+            muted
+        )
+
+        self.mute_button.setText(
+            "🔇" if muted else "🔊"
+        )
 
 
 
