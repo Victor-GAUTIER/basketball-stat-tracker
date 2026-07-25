@@ -62,8 +62,9 @@ CREATE TABLE IF NOT EXISTS events (
     quarter    INTEGER NOT NULL,
     event_type TEXT NOT NULL,
 
-    phase      TEXT,
-    system     TEXT,
+    phase       TEXT,
+    system      TEXT,
+    action_type TEXT,
 
     x          REAL,
     y          REAL,
@@ -95,6 +96,25 @@ class Database:
         assert self._connection is not None
         self._connection.executescript(SCHEMA)
         self._connection.commit()
+        self._migrate_schema()
+
+    def _migrate_schema(self) -> None:
+        """Ajoute les colonnes manquantes sur une base déjà existante.
+
+        SQLite ne supporte pas `ADD COLUMN IF NOT EXISTS`, donc on vérifie
+        manuellement la présence des colonnes via PRAGMA table_info avant
+        de les ajouter.
+        """
+        assert self._connection is not None
+
+        cur = self._connection.execute("PRAGMA table_info(events)")
+        existing_columns = {row["name"] for row in cur.fetchall()}
+
+        if "action_type" not in existing_columns:
+            self._connection.execute(
+                "ALTER TABLE events ADD COLUMN action_type TEXT"
+            )
+            self._connection.commit()
 
     @property
     def connection(self) -> sqlite3.Connection:
@@ -284,6 +304,7 @@ class Database:
         event_type: str,
         phase: Optional[str] = None,
         system: Optional[str] = None,
+        action_type: Optional[str] = None,
         x: Optional[float] = None,
         y: Optional[float] = None,
     ) -> int:
@@ -298,10 +319,11 @@ class Database:
                 event_type,
                 phase,
                 system,
+                action_type,
                 x,
                 y
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 game_id,
@@ -311,6 +333,7 @@ class Database:
                 event_type,
                 phase,
                 system,
+                action_type,
                 x,
                 y,
             ),
@@ -332,21 +355,25 @@ class Database:
         quarter: int,
         phase: Optional[str] = None,
         system: Optional[str] = None,
+        action_type: Optional[str] = None,
     ) -> None:
-        """Corrige la joueuse, le type, le quart-temps, la phase et/ou le système d'un événement.
+        """Corrige la joueuse, le type, le quart-temps, la phase, le système
+        et/ou le type d'action d'un événement.
 
         Le timestamp n'est pas modifié : il reste lié
         au moment réel où l'action a été cliquée pendant l'analyse vidéo.
         """
         self.connection.execute(
-            "UPDATE events SET player_id = ?, event_type = ?, quarter = ?, phase = ?, system = ? WHERE id = ?",
-            (player_id, event_type, quarter, phase, system, event_id),
+            "UPDATE events SET player_id = ?, event_type = ?, quarter = ?, "
+            "phase = ?, system = ?, action_type = ? WHERE id = ?",
+            (player_id, event_type, quarter, phase, system, action_type, event_id),
         )
         self.connection.commit()
 
     def get_events_for_game(self, game_id: int) -> List[Event]:
         cur = self.connection.execute(
-            "SELECT id, game_id, player_id, timestamp, quarter, event_type, phase, system, x, y "
+            "SELECT id, game_id, player_id, timestamp, quarter, event_type, "
+            "phase, system, action_type, x, y "
             "FROM events WHERE game_id = ? ORDER BY timestamp",
             (game_id,),
         )
@@ -360,6 +387,7 @@ class Database:
                 event_type=r["event_type"],
                 phase=r["phase"],
                 system=r["system"],
+                action_type=r["action_type"],
                 x=r["x"],
                 y=r["y"],
             )
@@ -368,7 +396,8 @@ class Database:
 
     def get_last_event_for_game(self, game_id: int) -> Optional[Event]:
         cur = self.connection.execute(
-            "SELECT id, game_id, player_id, timestamp, quarter, event_type, phase, system, x, y "
+            "SELECT id, game_id, player_id, timestamp, quarter, event_type, "
+            "phase, system, action_type, x, y "
             "FROM events WHERE game_id = ? ORDER BY id DESC LIMIT 1",
             (game_id,),
         )
@@ -384,6 +413,7 @@ class Database:
             event_type=r["event_type"],
             phase=r["phase"],
             system=r["system"],
+            action_type=r["action_type"],
             x=r["x"],
             y=r["y"],
         )

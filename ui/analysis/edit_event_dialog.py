@@ -7,6 +7,7 @@ permet de changer :
 - le quart-temps
 - la phase de jeu
 - le système
+- le type d'action
 
 L'horodatage reste inchangé.
 """
@@ -25,7 +26,7 @@ from PySide6.QtWidgets import (
 
 from data.models import Event, Player
 from ui.analysis.event_labels import EVENT_CHOICES
-from ui.analysis.phase_panel import PHASES
+from ui.analysis.phase_panel import ACTION_TYPES, PHASES
 
 
 
@@ -215,6 +216,40 @@ class EditEventDialog(QDialog):
 
 
         # -------------------------
+        # Type d'action
+        # -------------------------
+
+        self.action_type_combo = QComboBox(
+            self
+        )
+
+
+        self.action_type_combo.addItem(
+            ""
+        )
+
+
+        self.action_type_combo.addItems(
+            ACTION_TYPES
+        )
+
+
+        action_type_index = self.action_type_combo.findText(
+            event.action_type or ""
+        )
+
+
+        if action_type_index >= 0:
+
+            self.action_type_combo.setCurrentIndex(
+                action_type_index
+            )
+
+
+
+
+
+        # -------------------------
         # Boutons
         # -------------------------
 
@@ -278,6 +313,12 @@ class EditEventDialog(QDialog):
 
 
         form.addRow(
+            "Type d'action :",
+            self.action_type_combo
+        )
+
+
+        form.addRow(
             buttons
         )
 
@@ -313,7 +354,7 @@ class EditEventDialog(QDialog):
 
     def result_values(
         self
-    ) -> Tuple[int, str, int, str, Optional[str]]:
+    ) -> Tuple[int, str, int, str, Optional[str], Optional[str]]:
         """
         Retourne :
         (
@@ -321,13 +362,20 @@ class EditEventDialog(QDialog):
             event_type,
             quarter,
             phase,
-            system
+            system,
+            action_type
         )
         """
 
 
         system = (
             self.system_combo.currentText().strip()
+            or None
+        )
+
+
+        action_type = (
+            self.action_type_combo.currentText().strip()
             or None
         )
 
@@ -345,5 +393,7 @@ class EditEventDialog(QDialog):
             self.phase_combo.currentText(),
 
             system,
+
+            action_type,
 
         )

@@ -51,5 +51,6 @@ class Event:
     event_type: str
     phase: Optional[str] = None
     system: Optional[str] = None
+    action_type: Optional[str] = None
     x: Optional[float] = None
     y: Optional[float] = None

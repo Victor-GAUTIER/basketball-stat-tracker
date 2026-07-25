@@ -329,21 +329,16 @@ class AnalysisWindow(QMainWindow):
         )
 
 
-        splitter.addWidget(
-            right_widget
-        )
+        splitter.addWidget(video_container)
+        splitter.addWidget(right_widget)
 
+        video_container.setMinimumWidth(500)
+        right_widget.setMinimumWidth(500)
 
-        splitter.setStretchFactor(
-            0,
-            3
-        )
+        splitter.setStretchFactor(0, 3)
+        splitter.setStretchFactor(1, 1)
 
-
-        splitter.setStretchFactor(
-            1,
-            1
-        )
+        splitter.setSizes([900, 400])
 
 
         analysis_layout.addWidget(
@@ -1270,6 +1265,7 @@ class AnalysisWindow(QMainWindow):
 
         phase = self.phase_panel.current_phase()
         system = self.phase_panel.current_system()
+        action_type = self.phase_panel.current_action_type()
 
         self.controller.record_event(
             player_id,
@@ -1277,6 +1273,7 @@ class AnalysisWindow(QMainWindow):
             event_code,
             phase=phase,
             system=system,
+            action_type=action_type,
         )
 
 
@@ -1431,6 +1428,7 @@ class AnalysisWindow(QMainWindow):
 
         phase = self.phase_panel.current_phase()
         system = self.phase_panel.current_system()
+        action_type = self.phase_panel.current_action_type()
 
         self.controller.record_event(
             player_id,
@@ -1438,6 +1436,7 @@ class AnalysisWindow(QMainWindow):
             event_type,
             phase=phase,
             system=system,
+            action_type=action_type,
             x=x,
             y=y
         )
@@ -1549,7 +1548,7 @@ class AnalysisWindow(QMainWindow):
 
             return
 
-        player_id, event_type, quarter, phase, system = dialog.result_values()
+        player_id, event_type, quarter, phase, system, action_type = dialog.result_values()
 
         if player_id is None or event_type is None:
 
@@ -1562,6 +1561,7 @@ class AnalysisWindow(QMainWindow):
             quarter,
             phase,
             system,
+            action_type,
         )
 
         self._refresh_data()

@@ -84,55 +84,58 @@ class AnalysisController:
     # =====================================================
     # Enregistrement des événements
     # =====================================================
-
     def record_event(
-        self,
-        player_id: int,
-        timestamp: float,
-        event_type: str,
-        *,
-        phase: Optional[str] = None,
-        system: Optional[str] = None,
-        x: Optional[float] = None,
-        y: Optional[float] = None,
-    ) -> Event:
-        """
-        Ajoute un événement dans la base.
+            self,
+            player_id: int,
+            timestamp: float,
+            event_type: str,
+            *,
+            phase: Optional[str] = None,
+            system: Optional[str] = None,
+            action_type: Optional[str] = None,
+            x: Optional[float] = None,
+            y: Optional[float] = None,
+        ) -> Event:
+            """
+            Ajoute un événement dans la base.
 
-        phase et system décrivent la situation de jeu :
-        - phase : Contre attaque, Transition, Attaque placée, Touche...
-        - system : système associé (Ghost, Flash, Poing...)
+            phase et system décrivent la situation de jeu :
+            - phase : Contre attaque, Transition, Attaque placée, Touche...
+            - system : système associé (Ghost, Flash, Poing...)
+            action_type décrit le type d'action individuelle :
+            Jeu rapide, Pick and roll, Drive, Poste bas, Coupe,
+            Rebond off, Écran non porteur, Mouvement de balle.
 
-        x et y sont utilisés pour les tirs afin de construire
-        le shot chart.
-        """
+            x et y sont utilisés pour les tirs afin de construire
+            le shot chart.
+            """
 
-        event_id = self.database.add_event(
-            game_id=self.game_id,
-            player_id=player_id,
-            timestamp=timestamp,
-            quarter=self.current_quarter,
-            event_type=event_type,
-            phase=phase,
-            system=system,
-            x=x,
-            y=y,
-        )
+            event_id = self.database.add_event(
+                game_id=self.game_id,
+                player_id=player_id,
+                timestamp=timestamp,
+                quarter=self.current_quarter,
+                event_type=event_type,
+                phase=phase,
+                system=system,
+                action_type=action_type,
+                x=x,
+                y=y,
+            )
 
-        return Event(
-            id=event_id,
-            game_id=self.game_id,
-            player_id=player_id,
-            timestamp=timestamp,
-            quarter=self.current_quarter,
-            event_type=event_type,
-            phase=phase,
-            system=system,
-            x=x,
-            y=y,
-        )
-
-
+            return Event(
+                id=event_id,
+                game_id=self.game_id,
+                player_id=player_id,
+                timestamp=timestamp,
+                quarter=self.current_quarter,
+                event_type=event_type,
+                phase=phase,
+                system=system,
+                action_type=action_type,
+                x=x,
+                y=y,
+            )
 
     # =====================================================
     # Récupération événements
