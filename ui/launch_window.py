@@ -11,6 +11,7 @@ from typing import Optional
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
+    QDialog,
     QHBoxLayout,
     QLabel,
     QListWidget,
@@ -23,6 +24,122 @@ from PySide6.QtWidgets import (
 )
 
 from data.database import Database
+
+
+class TeamDetailsDialog(QDialog):
+    """Affiche le détail d'une équipe : son nom et la liste de ses joueuses."""
+
+    def __init__(
+        self,
+        database: Database,
+        team_id: int,
+        parent: Optional[QWidget] = None,
+    ) -> None:
+
+        super().__init__(parent)
+
+        team = next(
+            (
+                t
+                for t in database.get_teams()
+                if t.id == team_id
+            ),
+            None
+        )
+
+        self.setWindowTitle(
+            team.name
+            if team
+            else "Équipe"
+        )
+
+        self.setMinimumWidth(
+            320
+        )
+
+
+        layout = QVBoxLayout(
+            self
+        )
+
+
+        title = QLabel(
+            team.name
+            if team
+            else "Équipe introuvable",
+            self
+        )
+
+        title.setStyleSheet(
+            "font-size: 16px; font-weight: bold;"
+        )
+
+        title.setAlignment(
+            Qt.AlignmentFlag.AlignCenter
+        )
+
+        layout.addWidget(
+            title
+        )
+
+
+        players_list = QListWidget(
+            self
+        )
+
+
+        players = (
+            database.get_players_by_team(
+                team_id
+            )
+            if team
+            else []
+        )
+
+
+        if players:
+
+            for player in sorted(
+                players,
+                key=lambda p: p.number
+            ):
+
+                players_list.addItem(
+                    f"#{player.number} {player.name}"
+                )
+
+        else:
+
+            placeholder = QListWidgetItem(
+                "Aucune joueuse enregistrée pour cette équipe."
+            )
+
+            placeholder.setFlags(
+                Qt.ItemFlag.NoItemFlags
+            )
+
+            players_list.addItem(
+                placeholder
+            )
+
+
+        layout.addWidget(
+            players_list
+        )
+
+
+        close_button = QPushButton(
+            "Fermer",
+            self
+        )
+
+        close_button.clicked.connect(
+            self.accept
+        )
+
+        layout.addWidget(
+            close_button
+        )
 
 
 class LaunchWindow(QMainWindow):
@@ -49,13 +166,15 @@ class LaunchWindow(QMainWindow):
 
         self.resize(
             600,
-            520
+            680
         )
 
 
         self._build_ui()
 
         self._load_games()
+
+        self._load_teams()
 
 
 
@@ -157,6 +276,16 @@ class LaunchWindow(QMainWindow):
         )
 
 
+        self.delete_game_button = QPushButton(
+            "Supprimer le match",
+            self
+        )
+
+        self.delete_game_button.clicked.connect(
+            self._on_delete_game
+        )
+
+
         self.refresh_button = QPushButton(
             "Actualiser la liste",
             self
@@ -171,6 +300,10 @@ class LaunchWindow(QMainWindow):
             self.open_button
         )
 
+        actions_row.addWidget(
+            self.delete_game_button
+        )
+
 
         actions_row.addWidget(
             self.refresh_button
@@ -179,6 +312,59 @@ class LaunchWindow(QMainWindow):
 
         layout.addLayout(
             actions_row
+        )
+
+
+
+        # -------------------------
+        # Equipes enregistrées
+        # -------------------------
+
+        layout.addWidget(
+            QLabel(
+                "Équipes enregistrées :",
+                self
+            )
+        )
+
+
+        self.teams_list = QListWidget(
+            self
+        )
+
+
+        self.teams_list.itemDoubleClicked.connect(
+            lambda _item:
+            self._on_view_team()
+        )
+
+
+        layout.addWidget(
+            self.teams_list,
+            stretch=1
+        )
+
+
+        teams_actions_row = QHBoxLayout()
+
+
+        self.delete_team_button = QPushButton(
+            "Supprimer l'équipe",
+            self
+        )
+
+        self.delete_team_button.clicked.connect(
+            self._on_delete_team
+        )
+
+
+        teams_actions_row.addWidget(
+            self.delete_team_button
+        )
+
+
+        layout.addLayout(
+            teams_actions_row
         )
 
 
@@ -233,7 +419,56 @@ class LaunchWindow(QMainWindow):
 
 
     # =====================================================
-    # Actions
+    # Chargement équipes
+    # =====================================================
+
+    def _load_teams(self) -> None:
+
+        self.teams_list.clear()
+
+
+        teams = self.database.get_teams()
+
+
+        if not teams:
+
+            placeholder = QListWidgetItem(
+                "Aucune équipe enregistrée pour l'instant."
+            )
+
+            placeholder.setFlags(
+                Qt.ItemFlag.NoItemFlags
+            )
+
+            self.teams_list.addItem(
+                placeholder
+            )
+
+            return
+
+
+
+        for team in teams:
+
+            item = QListWidgetItem(
+                team.name
+            )
+
+
+            item.setData(
+                Qt.ItemDataRole.UserRole,
+                team.id
+            )
+
+
+            self.teams_list.addItem(
+                item
+            )
+
+
+
+    # =====================================================
+    # Actions matchs
     # =====================================================
 
     def _on_new_game(self) -> None:
@@ -297,3 +532,141 @@ class LaunchWindow(QMainWindow):
         # on garde la fenêtre en mémoire
         # pour pouvoir revenir dessus
         self.hide()
+
+
+
+    def _on_delete_game(self) -> None:
+
+        item = self.games_list.currentItem()
+
+
+        game_id = (
+            item.data(
+                Qt.ItemDataRole.UserRole
+            )
+            if item is not None
+            else None
+        )
+
+
+        if game_id is None:
+
+            QMessageBox.information(
+                self,
+                "Aucune sélection",
+                "Sélectionnez un match dans la liste."
+            )
+
+            return
+
+
+
+        reply = QMessageBox.question(
+            self,
+            "Supprimer le match",
+            "Supprimer définitivement ce match ainsi que tous ses "
+            "événements enregistrés ? Cette action est irréversible."
+        )
+
+
+        if reply != QMessageBox.StandardButton.Yes:
+
+            return
+
+
+
+        self.database.delete_game(
+            game_id
+        )
+
+
+        self._load_games()
+
+
+
+    # =====================================================
+    # Actions équipes
+    # =====================================================
+
+    def _on_view_team(self) -> None:
+
+        item = self.teams_list.currentItem()
+
+
+        team_id = (
+            item.data(
+                Qt.ItemDataRole.UserRole
+            )
+            if item is not None
+            else None
+        )
+
+
+        if team_id is None:
+
+            return
+
+
+
+        dialog = TeamDetailsDialog(
+            self.database,
+            team_id,
+            self
+        )
+
+
+        dialog.exec()
+
+
+
+    def _on_delete_team(self) -> None:
+
+        item = self.teams_list.currentItem()
+
+
+        team_id = (
+            item.data(
+                Qt.ItemDataRole.UserRole
+            )
+            if item is not None
+            else None
+        )
+
+
+        if team_id is None:
+
+            QMessageBox.information(
+                self,
+                "Aucune sélection",
+                "Sélectionnez une équipe dans la liste."
+            )
+
+            return
+
+
+
+        reply = QMessageBox.question(
+            self,
+            "Supprimer l'équipe",
+            "Supprimer définitivement cette équipe ainsi que ses "
+            "joueuses ? Les matchs associés ne seront pas supprimés, "
+            "mais perdront cette équipe. Cette action est irréversible."
+        )
+
+
+        if reply != QMessageBox.StandardButton.Yes:
+
+            return
+
+
+
+        self.database.delete_team(
+            team_id
+        )
+
+
+        self._load_teams()
+
+
+        # Les matchs affichés peuvent référencer l'équipe supprimée
+        self._load_games()

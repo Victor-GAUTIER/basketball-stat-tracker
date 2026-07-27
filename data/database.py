@@ -417,3 +417,16 @@ class Database:
             x=r["x"],
             y=r["y"],
         )
+
+    def delete_game(self, game_id: int) -> None:
+            """Supprime un match (et en cascade ses liens équipes/joueurs et ses événements)."""
+            self.connection.execute("DELETE FROM games WHERE id = ?", (game_id,))
+            self.connection.commit()
+
+    def swap_home_away(self, game_id: int) -> None:
+        """Inverse le statut domicile/extérieur des deux équipes d'un match."""
+        self.connection.execute(
+            "UPDATE game_teams SET is_home = 1 - is_home WHERE game_id = ?",
+            (game_id,),
+        )
+        self.connection.commit()

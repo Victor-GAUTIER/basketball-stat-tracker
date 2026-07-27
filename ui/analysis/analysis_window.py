@@ -535,7 +535,24 @@ class AnalysisWindow(QMainWindow):
             invert_sides_action
         )
 
+        # -------------------------
+        # Inverser équipe domicile / extérieur
+        # -------------------------
 
+        swap_home_action = QAction(
+            "Inverser équipe domicile / extérieur",
+            self
+        )
+
+
+        swap_home_action.triggered.connect(
+            self._swap_home_away
+        )
+
+
+        options_menu.addAction(
+            swap_home_action
+        )
 
         # -------------------------
         # Changer de match
@@ -708,6 +725,27 @@ class AnalysisWindow(QMainWindow):
             })
 
         return markers
+
+    def _swap_home_away(self):
+
+            """
+            Inverse le statut domicile/extérieur des deux équipes du match.
+            Recharge ensuite toutes les données pour que couleurs, orientation
+            du terrain, stats et comparaison reflètent le nouveau statut.
+            """
+
+            self.database.swap_home_away(
+                self.controller.game_id
+            )
+
+
+            self._load_game_data()
+
+
+            self.statusBar().showMessage(
+                "Équipe domicile / extérieure inversée",
+                3000
+            )
 
     def _compute_score(self):
         """Calcule le score des deux équipes à partir des tirs marqués."""
