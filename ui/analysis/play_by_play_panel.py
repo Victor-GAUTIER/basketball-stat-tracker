@@ -25,11 +25,24 @@ AWAY_COLOR = QColor("#1e6fd9")  # bleu
 
 SHOT_TYPES = ("2PTS_MADE", "2PTS_MISSED", "3PTS_MADE", "3PTS_MISSED")
 
+TURNOVER_TYPES = (
+    "TO_PASS",
+    "TO_DRIBBLE",
+    "TO_VIOLATION",
+    "TO_SORTIE",
+    "TO_FAUTE",
+    "TO_TEMPS",
+    "TO_AUTRE",
+    "TURNOVER",
+)
+
 # Valeurs spéciales pour le filtre "Événement", représentant des tirs
-# regroupés (2 et 3 points confondus) plutôt qu'un event_type unique.
+# regroupés (2 et 3 points confondus) ou des pertes de balle regroupées
+# (tous types confondus) plutôt qu'un event_type unique.
 SHOTS_MADE = "__SHOTS_MADE__"
 SHOTS_MISSED = "__SHOTS_MISSED__"
 SHOTS_ALL = "__SHOTS_ALL__"
+TURNOVERS_ALL = "__TURNOVERS_ALL__"
 
 
 class PlayByPlayPanel(QWidget):
@@ -353,12 +366,16 @@ class PlayByPlayPanel(QWidget):
             for e in self._all_events
         })
 
-        # Options "tirs" regroupées (2 et 3 points confondus), affichées
-        # avant la liste des événements individuels.
+        # Options "tirs" et "pertes de balle" regroupées, affichées avant
+        # la liste des événements individuels.
         shot_group_options = [
             ("Tirs réussis (2+3 pts)", SHOTS_MADE),
             ("Tirs manqués (2+3 pts)", SHOTS_MISSED),
             ("Tous les tirs (2+3 pts)", SHOTS_ALL),
+        ]
+
+        turnover_group_options = [
+            ("Pertes de balle (tous types)", TURNOVERS_ALL),
         ]
 
         event_options = [
@@ -402,7 +419,7 @@ class PlayByPlayPanel(QWidget):
         self._populate_combo(
             self.event_filter,
             "Tous les événements",
-            shot_group_options + event_options
+            shot_group_options + turnover_group_options + event_options
         )
 
         self._populate_combo(
@@ -510,6 +527,9 @@ class PlayByPlayPanel(QWidget):
 
             if event_type == SHOTS_ALL:
                 return event.event_type in SHOT_TYPES
+
+            if event_type == TURNOVERS_ALL:
+                return event.event_type.startswith("TO_") or event.event_type == "TURNOVER"
 
             return event.event_type == event_type
 

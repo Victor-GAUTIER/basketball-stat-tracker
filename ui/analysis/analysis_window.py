@@ -38,6 +38,7 @@ from ui.analysis.edit_event_dialog import EditEventDialog
 from ui.analysis.shot_map_widget import ShotChartSummaryPanel
 from ui.analysis.phase_panel import PhasePanel
 from ui.analysis.team_comparison_panel import TeamComparisonPanel
+from ui.analysis.turnover_dialog import TurnoverTypeDialog
 
 
 
@@ -855,7 +856,16 @@ class AnalysisWindow(QMainWindow):
 
             totals["REB"] += oreb + dreb
             totals["AST"] += player_stats.get("ASSIST", 0)
-            totals["TO"] += player_stats.get("TURNOVER", 0)
+            totals["TO"] += (
+                player_stats.get("TO_PASS", 0)
+                + player_stats.get("TO_DRIBBLE", 0)
+                + player_stats.get("TO_VIOLATION", 0)
+                + player_stats.get("TO_SORTIE", 0)
+                + player_stats.get("TO_FAUTE", 0)
+                + player_stats.get("TO_TEMPS", 0)
+                + player_stats.get("TO_AUTRE", 0)
+                + player_stats.get("TURNOVER", 0)
+            )
             totals["STL"] += player_stats.get("STEAL", 0)
             totals["BLK"] += player_stats.get("BLOCK", 0)
             totals["PF"] += player_stats.get("FOUL", 0)
@@ -1300,6 +1310,24 @@ class AnalysisWindow(QMainWindow):
 
             return
 
+        if event_code == "TURNOVER":
+
+            dialog = TurnoverTypeDialog(
+                self
+            )
+
+
+            if dialog.exec() != TurnoverTypeDialog.DialogCode.Accepted:
+
+                return
+
+
+            event_code = dialog.selected_code()
+
+
+            if event_code is None:
+
+                return
 
         phase = self.phase_panel.current_phase()
         system = self.phase_panel.current_system()

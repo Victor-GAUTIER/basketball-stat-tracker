@@ -36,6 +36,21 @@ HEADERS = [
 ]
 
 
+# Codes de perte de balle : les nouveaux codes détaillés, plus l'ancien
+# code générique "TURNOVER" conservé pour les événements enregistrés
+# avant l'ajout du choix du type de perte de balle.
+TURNOVER_CODES = [
+    "TO_PASS",
+    "TO_DRIBBLE",
+    "TO_VIOLATION",
+    "TO_SORTIE",
+    "TO_FAUTE",
+    "TO_TEMPS",
+    "TO_AUTRE",
+    "TURNOVER",
+]
+
+
 class StatsPanel(QWidget):
     """Affiche les boxscores des deux équipes, avec une ligne TOTAL toujours visible."""
 
@@ -320,6 +335,21 @@ class StatsPanel(QWidget):
 
 
     # =====================================================
+    # Pertes de balle
+    # =====================================================
+
+    @staticmethod
+    def _turnover_count(player_stats: Dict[str, Any]) -> int:
+        """Somme tous les codes de perte de balle (types détaillés +
+        ancien code générique "TURNOVER" pour la compatibilité)."""
+
+        return sum(
+            player_stats.get(code, 0)
+            for code in TURNOVER_CODES
+        )
+
+
+    # =====================================================
     # Actualisation
     # =====================================================
 
@@ -482,9 +512,8 @@ class StatsPanel(QWidget):
                 0
             )
 
-            turnover = player_stats.get(
-                "TURNOVER",
-                0
+            turnover = self._turnover_count(
+                player_stats
             )
 
             steal = player_stats.get(
