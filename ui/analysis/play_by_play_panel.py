@@ -7,6 +7,7 @@ from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
+    QDoubleSpinBox,
     QHBoxLayout,
     QLabel,
     QPushButton,
@@ -50,6 +51,8 @@ class PlayByPlayPanel(QWidget):
     event_deleted = Signal(int)
     event_edit_requested = Signal(int)
     event_seek_requested = Signal(float)
+
+    export_requested = Signal(list, float, float)
 
     def __init__(
         self,
@@ -167,6 +170,34 @@ class PlayByPlayPanel(QWidget):
 
         layout = QVBoxLayout(self)
 
+
+        # -------------------------
+        # Export vidéo
+        # -------------------------
+
+        self.export_before_spin = QDoubleSpinBox(self)
+        self.export_before_spin.setRange(0.0, 30.0)
+        self.export_before_spin.setValue(3.0)
+        self.export_before_spin.setSuffix(" s avant")
+        self.export_before_spin.setSingleStep(0.5)
+
+        self.export_after_spin = QDoubleSpinBox(self)
+        self.export_after_spin.setRange(0.0, 30.0)
+        self.export_after_spin.setValue(2.0)
+        self.export_after_spin.setSuffix(" s après")
+        self.export_after_spin.setSingleStep(0.5)
+
+        self.export_btn = QPushButton("🎬 Exporter le montage")
+        self.export_btn.clicked.connect(self._on_export_clicked)
+
+        export_row = QHBoxLayout()
+        export_row.addWidget(QLabel("Durée des segments :"))
+        export_row.addWidget(self.export_before_spin)
+        export_row.addWidget(self.export_after_spin)
+        export_row.addStretch()
+        export_row.addWidget(self.export_btn)
+
+
         layout.addLayout(
             filters_row
         )
@@ -174,6 +205,8 @@ class PlayByPlayPanel(QWidget):
         layout.addWidget(
             self.table
         )
+
+        layout.addLayout(export_row)
 
         # Tous les événements du match, indépendamment des filtres actifs
         self._all_events: List[Event] = []
@@ -730,3 +763,18 @@ class PlayByPlayPanel(QWidget):
             self.event_seek_requested.emit(
                 event.timestamp
             )
+
+    def _on_export_clicked(self):
+
+        if not self._events:
+            return
+
+        before = self.export_before_spin.value()
+        after = self.export_after_spin.value()
+
+        # On exporte exactement les évènements actuellement filtrés/affichés
+        self.export_requested.emit(
+            list(self._events),
+            before,
+            after
+        )
