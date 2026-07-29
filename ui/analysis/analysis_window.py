@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import List
 
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QTimer, QThread
 from PySide6.QtGui import QKeySequence, QShortcut, QAction
 from PySide6.QtWidgets import (
     QFileDialog,
@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
     QTabWidget,
     QVBoxLayout,
     QWidget,
+    QProgressDialog,
 )
 
 
@@ -27,6 +28,7 @@ from data.database import Database
 from data.models import Player
 
 from export.csv_export import export_events_to_csv
+from export.video_export import VideoExportWorker
 
 from ui.analysis.video_panel import VideoPanel
 from ui.analysis.player_panel import PlayerPanel
@@ -463,6 +465,14 @@ class AnalysisWindow(QMainWindow):
 
         self.playbyplay_panel.event_seek_requested.connect(
             self._on_seek_from_playbyplay
+        )
+
+        self.playbyplay_panel.event_seek_requested.connect(
+            self._on_seek_from_playbyplay
+        )
+
+        self.playbyplay_panel.export_requested.connect(
+            self._on_export_video_requested
         )
 
     # =====================================================
@@ -1138,7 +1148,7 @@ class AnalysisWindow(QMainWindow):
 
             return
 
-
+        self.video_path = game.video_path
 
         self.video_panel.load_video(
             game.video_path
@@ -1714,7 +1724,90 @@ class AnalysisWindow(QMainWindow):
 
         )
 
+    # =====================================================
+    # Export vidéo (montage des actions filtrées)
+    # =====================================================
 
+    def _on_export_video_requested(self, events, before, after):
+
+        if not events:
+            return
+
+        if not getattr(self, "video_path", None):
+            QMessageBox.warning(
+                self,
+                "Vidéo introuvable",
+                "Aucune vidéo n'est associée à ce match."
+            )
+            return
+
+        output_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Exporter le montage vidéo",
+            "montage.mp4",
+            "Vidéo MP4 (*.mp4)"
+        )
+
+        if not output_path:
+            return
+
+        self._export_thread = QThread(self)
+        self._export_worker = VideoExportWorker(
+            video_path=self.video_path,
+            events=events,
+            before=before,
+            after=after,
+            output_path=output_path,
+        )
+        self._export_worker.moveToThread(self._export_thread)
+
+        self._export_progress_dialog = QProgressDialog(
+            "Export du montage en cours...", "Annuler", 0, len(events), self
+        )
+        self._export_progress_dialog.setWindowModality(Qt.WindowModal)
+
+        self._export_thread.started.connect(self._export_worker.run)
+
+        self._export_worker.progress.connect(
+            self._on_export_progress,
+            Qt.ConnectionType.QueuedConnection
+        )
+
+        self._export_worker.finished.connect(self._on_export_video_finished)
+        self._export_worker.error.connect(self._on_export_video_error)
+
+        self._export_progress_dialog.canceled.connect(
+            self._export_worker.cancel
+        )
+
+        self._export_worker.finished.connect(self._export_thread.quit)
+        self._export_worker.error.connect(self._export_thread.quit)
+
+        self._export_thread.start()
+
+    def _on_export_video_finished(self, output_path):
+
+        self._export_progress_dialog.close()
+
+        QMessageBox.information(
+            self,
+            "Export terminé",
+            f"Montage enregistré :\n{output_path}"
+        )
+
+    def _on_export_progress(self, done, total):
+
+        self._export_progress_dialog.setValue(done)
+
+    def _on_export_video_error(self, message):
+
+        self._export_progress_dialog.close()
+
+        QMessageBox.critical(
+            self,
+            "Erreur d'export",
+            message
+        )
 
     # =====================================================
     # Actualisation affichage
