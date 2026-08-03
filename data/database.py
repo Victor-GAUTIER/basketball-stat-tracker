@@ -430,3 +430,16 @@ class Database:
             (game_id,),
         )
         self.connection.commit()
+
+    def get_games_for_team(self, team_id: int) -> List[Game]:
+        """Retourne tous les matchs auxquels une équipe a participé."""
+        cur = self.connection.execute(
+            "SELECT g.id, g.name, g.date, g.video_path FROM games g "
+            "JOIN game_teams gt ON gt.game_id = g.id "
+            "WHERE gt.team_id = ? ORDER BY g.date",
+            (team_id,),
+        )
+        return [
+            Game(id=r["id"], name=r["name"], date=r["date"], video_path=r["video_path"])
+            for r in cur.fetchall()
+        ]

@@ -358,8 +358,22 @@ class LaunchWindow(QMainWindow):
         )
 
 
+        self.analyze_team_button = QPushButton(
+            "Analyser l'équipe",
+            self
+        )
+
+        self.analyze_team_button.clicked.connect(
+            self._on_analyze_team
+        )
+
+
         teams_actions_row.addWidget(
             self.delete_team_button
+        )
+
+        teams_actions_row.addWidget(
+            self.analyze_team_button
         )
 
 
@@ -618,6 +632,37 @@ class LaunchWindow(QMainWindow):
         dialog.exec()
 
 
+    def _on_analyze_team(self) -> None:
+
+        item = self.teams_list.currentItem()
+
+        team_id = (
+            item.data(
+                Qt.ItemDataRole.UserRole
+            )
+            if item is not None
+            else None
+        )
+
+        if team_id is None:
+
+            QMessageBox.information(
+                self,
+                "Aucune sélection",
+                "Sélectionnez une équipe dans la liste."
+            )
+
+            return
+
+        from ui.analysis.team_analysis_window import TeamAnalysisWindow
+
+        self.team_analysis_window = TeamAnalysisWindow(
+            self.database,
+            team_id,
+            self
+        )
+
+        self.team_analysis_window.show()
 
     def _on_delete_team(self) -> None:
 

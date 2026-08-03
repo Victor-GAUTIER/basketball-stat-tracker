@@ -467,10 +467,6 @@ class AnalysisWindow(QMainWindow):
             self._on_seek_from_playbyplay
         )
 
-        self.playbyplay_panel.event_seek_requested.connect(
-            self._on_seek_from_playbyplay
-        )
-
         self.playbyplay_panel.export_requested.connect(
             self._on_export_video_requested
         )
