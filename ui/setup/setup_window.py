@@ -116,8 +116,12 @@ class SetupWindow(QMainWindow):
             video_path=self.video_path_edit.text().strip(),
             home_team_name=self.home_team_editor.team_name(),
             home_players=self.home_team_editor.players(),
+            home_present_players=self.home_team_editor.present_players(),
+            home_color=self.home_team_editor.team_color(),
             away_team_name=self.away_team_editor.team_name(),
             away_players=self.away_team_editor.players(),
+            away_present_players=self.away_team_editor.present_players(),
+            away_color=self.away_team_editor.team_color(),
         )
 
         self._open_analysis_window(game_id)
@@ -129,9 +133,15 @@ class SetupWindow(QMainWindow):
         if not self.video_path_edit.text().strip():
             errors.append("- Une vidéo doit être sélectionnée.")
         if not self.home_team_editor.is_valid():
-            errors.append("- L'équipe à domicile doit avoir un nom et au moins un joueur.")
+            errors.append(
+                "- L'équipe à domicile doit avoir un nom et au moins un "
+                "joueur présent."
+            )
         if not self.away_team_editor.is_valid():
-            errors.append("- L'équipe à l'extérieur doit avoir un nom et au moins un joueur.")
+            errors.append(
+                "- L'équipe à l'extérieur doit avoir un nom et au moins un "
+                "joueur présent."
+            )
         return errors
 
     def _open_analysis_window(self, game_id: int) -> None:

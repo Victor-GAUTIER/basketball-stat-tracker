@@ -20,7 +20,6 @@ from PySide6.QtWidgets import (
 from data.models import Event, Player
 from ui.analysis.event_labels import event_label
 
-
 HOME_COLOR = QColor("#e07b00")  # orange
 AWAY_COLOR = QColor("#1e6fd9")  # bleu
 
@@ -223,6 +222,8 @@ class PlayByPlayPanel(QWidget):
         self._home_name = "Domicile"
         self._away_name = "Extérieur"
 
+        self._home_color = HOME_COLOR
+        self._away_color = AWAY_COLOR
 
     # =====================================================
     # Chargement des données
@@ -275,6 +276,14 @@ class PlayByPlayPanel(QWidget):
 
         self._apply_filters()
 
+    def set_team_colors(self, home_color: str, away_color: str) -> None:
+            """Met à jour les couleurs utilisées pour distinguer les deux
+            équipes dans le tableau (au lieu du bleu/orange par défaut)."""
+
+            self._home_color = QColor(home_color)
+            self._away_color = QColor(away_color)
+
+            self._render_table()
 
     # =====================================================
     # Construction des filtres
@@ -644,13 +653,13 @@ class PlayByPlayPanel(QWidget):
                     if event.player_id in self._home_player_ids:
 
                         item.setForeground(
-                            HOME_COLOR
+                            self._home_color
                         )
 
                     elif event.player_id in self._away_player_ids:
 
                         item.setForeground(
-                            AWAY_COLOR
+                            self._away_color
                         )
 
                 self.table.setItem(

@@ -562,6 +562,25 @@ class AnalysisWindow(QMainWindow):
         )
 
         # -------------------------
+        # Joueuses présentes
+        # -------------------------
+
+        edit_players_action = QAction(
+            "Joueuses présentes...",
+            self
+        )
+
+
+        edit_players_action.triggered.connect(
+            self._on_edit_game_players
+        )
+
+
+        options_menu.addAction(
+            edit_players_action
+        )
+
+        # -------------------------
         # Changer de match
         # -------------------------
 
@@ -753,6 +772,60 @@ class AnalysisWindow(QMainWindow):
                 "Équipe domicile / extérieure inversée",
                 3000
             )
+
+    # =====================================================
+    # Joueuses présentes au match
+    # =====================================================
+    def _on_edit_game_players(self):
+
+        """
+        Ouvre un dialogue permettant de cocher/décocher, pour chaque équipe,
+        les joueuses présentes à CE match (indépendamment de l'effectif
+        complet de l'équipe, conservé en base).
+        """
+
+        from ui.analysis.game_players_dialog import GamePlayersDialog
+
+        home_roster = (
+            self.database.get_players_by_team(self.home_team.id)
+            if self.home_team
+            else []
+        )
+
+        away_roster = (
+            self.database.get_players_by_team(self.away_team.id)
+            if self.away_team
+            else []
+        )
+
+        home_present_ids = [p.id for p in self.home_players]
+        away_present_ids = [p.id for p in self.away_players]
+
+        dialog = GamePlayersDialog(
+            self.home_team.name if self.home_team else "Domicile",
+            home_roster,
+            home_present_ids,
+            self.away_team.name if self.away_team else "Extérieur",
+            away_roster,
+            away_present_ids,
+            self,
+        )
+
+        if dialog.exec() != GamePlayersDialog.DialogCode.Accepted:
+
+            return
+
+        self.database.set_game_players(
+            self.controller.game_id,
+            dialog.present_player_ids(),
+        )
+
+        self._load_game_data()
+
+        self.statusBar().showMessage(
+            "Joueuses présentes mises à jour",
+            3000
+        )
 
     def _compute_score(self):
         """Calcule le score des deux équipes à partir des tirs marqués."""
@@ -1189,7 +1262,18 @@ class AnalysisWindow(QMainWindow):
 
         self.away_team = away
 
+        # Sauvegarde des équipes
+        self.home_team = home
 
+        self.away_team = away
+
+        if self.home_team and self.away_team:
+            self.playbyplay_panel.set_team_colors(
+                self.home_team.color, self.away_team.color
+            )
+            self.shot_chart_summary_panel.set_team_colors(
+                self.home_team.color, self.away_team.color
+            )
 
         # -------------------------
         # Joueurs

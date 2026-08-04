@@ -14,12 +14,18 @@ from typing import List, Optional, Tuple
 from data.models import Event, Game, Player, Team
 
 
+# Couleur par défaut attribuée à une équipe qui n'en a pas encore choisi une
+# (équipes créées avant l'ajout de cette fonctionnalité, par exemple).
+DEFAULT_TEAM_COLOR = "#297ffe"
+
+
 # Schéma complet de la base. `IF NOT EXISTS` permet de relancer l'application
 # sur une base déjà existante sans erreur.
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS teams (
-    id   INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL UNIQUE
+    id    INTEGER PRIMARY KEY AUTOINCREMENT,
+    name  TEXT NOT NULL UNIQUE,
+    color TEXT
 );
 
 CREATE TABLE IF NOT EXISTS players (
@@ -116,6 +122,15 @@ class Database:
             )
             self._connection.commit()
 
+        cur = self._connection.execute("PRAGMA table_info(teams)")
+        existing_team_columns = {row["name"] for row in cur.fetchall()}
+
+        if "color" not in existing_team_columns:
+            self._connection.execute(
+                "ALTER TABLE teams ADD COLUMN color TEXT"
+            )
+            self._connection.commit()
+
     @property
     def connection(self) -> sqlite3.Connection:
         assert self._connection is not None
@@ -129,25 +144,65 @@ class Database:
     # ------------------------------------------------------------------
     # Equipes
     # ------------------------------------------------------------------
-    def get_or_create_team(self, name: str) -> int:
-        """Retourne l'id de l'équipe portant ce nom, en la créant si besoin."""
+    def get_or_create_team(
+        self, name: str, color: Optional[str] = None
+    ) -> int:
+        """Retourne l'id de l'équipe portant ce nom, en la créant si besoin.
+
+        Si l'équipe existe déjà et qu'une couleur est fournie, elle est mise
+        à jour (permet de changer la couleur d'une équipe existante depuis
+        l'écran de création de match).
+        """
         cur = self.connection.execute("SELECT id FROM teams WHERE name = ?", (name,))
         row = cur.fetchone()
         if row is not None:
+            if color is not None:
+                self.connection.execute(
+                    "UPDATE teams SET color = ? WHERE id = ?", (color, row["id"])
+                )
+                self.connection.commit()
             return int(row["id"])
-        cur = self.connection.execute("INSERT INTO teams (name) VALUES (?)", (name,))
+        cur = self.connection.execute(
+            "INSERT INTO teams (name, color) VALUES (?, ?)",
+            (name, color or DEFAULT_TEAM_COLOR),
+        )
         self.connection.commit()
         return int(cur.lastrowid)
 
     def get_teams(self) -> List[Team]:
-        cur = self.connection.execute("SELECT id, name FROM teams ORDER BY name")
-        return [Team(id=r["id"], name=r["name"]) for r in cur.fetchall()]
-
-    def update_team(self, team_id: int, name: str) -> None:
-        """Modifie le nom d'une équipe."""
-        self.connection.execute(
-            "UPDATE teams SET name = ? WHERE id = ?", (name, team_id)
+        cur = self.connection.execute(
+            "SELECT id, name, color FROM teams ORDER BY name"
         )
+        return [
+            Team(id=r["id"], name=r["name"], color=r["color"] or DEFAULT_TEAM_COLOR)
+            for r in cur.fetchall()
+        ]
+
+    def get_team(self, team_id: int) -> Optional[Team]:
+        cur = self.connection.execute(
+            "SELECT id, name, color FROM teams WHERE id = ?", (team_id,)
+        )
+        r = cur.fetchone()
+        if r is None:
+            return None
+        return Team(id=r["id"], name=r["name"], color=r["color"] or DEFAULT_TEAM_COLOR)
+
+    def update_team(
+        self, team_id: int, name: str, color: Optional[str] = None
+    ) -> None:
+        """Modifie le nom et/ou la couleur d'une équipe.
+
+        `color` à None laisse la couleur actuelle inchangée.
+        """
+        if color is None:
+            self.connection.execute(
+                "UPDATE teams SET name = ? WHERE id = ?", (name, team_id)
+            )
+        else:
+            self.connection.execute(
+                "UPDATE teams SET name = ?, color = ? WHERE id = ?",
+                (name, color, team_id),
+            )
         self.connection.commit()
 
     def delete_team(self, team_id: int) -> None:
@@ -262,13 +317,16 @@ class Database:
     def get_game_teams(self, game_id: int) -> List[Tuple[Team, bool]]:
         """Retourne les deux équipes associées à un match, avec leur statut domicile/extérieur."""
         cur = self.connection.execute(
-            "SELECT t.id, t.name, gt.is_home FROM teams t "
+            "SELECT t.id, t.name, t.color, gt.is_home FROM teams t "
             "JOIN game_teams gt ON gt.team_id = t.id "
             "WHERE gt.game_id = ? ORDER BY gt.is_home DESC",
             (game_id,),
         )
         return [
-            (Team(id=r["id"], name=r["name"]), bool(r["is_home"]))
+            (
+                Team(id=r["id"], name=r["name"], color=r["color"] or DEFAULT_TEAM_COLOR),
+                bool(r["is_home"]),
+            )
             for r in cur.fetchall()
         ]
 
@@ -276,6 +334,29 @@ class Database:
         self.connection.execute(
             "INSERT OR IGNORE INTO game_players (game_id, player_id) VALUES (?, ?)",
             (game_id, player_id),
+        )
+        self.connection.commit()
+
+    def unlink_game_player(self, game_id: int, player_id: int) -> None:
+        """Retire un joueur de la liste des présents pour ce match."""
+        self.connection.execute(
+            "DELETE FROM game_players WHERE game_id = ? AND player_id = ?",
+            (game_id, player_id),
+        )
+        self.connection.commit()
+
+    def set_game_players(self, game_id: int, player_ids: List[int]) -> None:
+        """Remplace la liste des joueurs présents à un match par `player_ids`.
+
+        À utiliser depuis l'écran de création/édition de match, une fois que
+        l'utilisateur a coché les joueuses présentes des deux équipes.
+        """
+        self.connection.execute(
+            "DELETE FROM game_players WHERE game_id = ?", (game_id,)
+        )
+        self.connection.executemany(
+            "INSERT OR IGNORE INTO game_players (game_id, player_id) VALUES (?, ?)",
+            [(game_id, player_id) for player_id in player_ids],
         )
         self.connection.commit()
 

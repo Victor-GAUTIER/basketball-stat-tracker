@@ -53,10 +53,22 @@ class ShotChartSummaryWidget(QWidget):
         self._home_label = "Domicile"
         self._away_label = "Extérieur"
 
+        self._markers: List[Dict] = []
+        self._home_label = "Domicile"
+        self._away_label = "Extérieur"
+
+        self._home_color = self.HOME_COLOR
+        self._away_color = self.AWAY_COLOR
+
     def set_team_labels(self, home_label: str, away_label: str) -> None:
         self._home_label = home_label
         self._away_label = away_label
         self.update()
+
+    def set_team_colors(self, home_color: str, away_color: str) -> None:
+            self._home_color = QColor(home_color)
+            self._away_color = QColor(away_color)
+            self.update()
 
     def set_shots(self, markers: List[Dict]) -> None:
         """markers : liste de dicts {x, y, made, is_home, player_id},
@@ -100,12 +112,12 @@ class ShotChartSummaryWidget(QWidget):
         font.setBold(True)
         painter.setFont(font)
 
-        painter.setPen(self.AWAY_COLOR)
+        painter.setPen(self._away_color)
         painter.drawText(
             x_offset, max(0, y_offset - 10), half_width, 18,
             Qt.AlignmentFlag.AlignCenter, self._away_label,
         )
-        painter.setPen(self.HOME_COLOR)
+        painter.setPen(self._home_color)
         painter.drawText(
             x_offset + half_width, max(0, y_offset - 20), court.width() - half_width, 18,
             Qt.AlignmentFlag.AlignCenter, self._home_label,
@@ -114,7 +126,7 @@ class ShotChartSummaryWidget(QWidget):
         # Tirs : ronds pleins = marqués, croix = manqués.
         for marker in self._markers:
 
-            color = self.HOME_COLOR if marker["is_home"] else self.AWAY_COLOR
+            color = self._home_color if marker["is_home"] else self._away_color
 
             px = x_offset + marker["x"] * court.width()
             py = y_offset + marker["y"] * court.height()
@@ -186,6 +198,9 @@ class ShotChartSummaryPanel(QWidget):
 
     def set_team_labels(self, home_label: str, away_label: str) -> None:
         self.chart.set_team_labels(home_label, away_label)
+
+    def set_team_colors(self, home_color: str, away_color: str) -> None:
+        self.chart.set_team_colors(home_color, away_color)
 
     def set_players(self, players: List[Player]) -> None:
         """Alimente le menu déroulant de filtrage par joueuse.

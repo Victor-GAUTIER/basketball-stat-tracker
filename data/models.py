@@ -17,6 +17,7 @@ class Team:
 
     id: Optional[int]
     name: str
+    color: str = "#297ffe"
 
 
 @dataclass

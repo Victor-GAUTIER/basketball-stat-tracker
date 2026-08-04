@@ -348,6 +348,16 @@ class LaunchWindow(QMainWindow):
         teams_actions_row = QHBoxLayout()
 
 
+        self.edit_team_button = QPushButton(
+            "Modifier l'équipe",
+            self
+        )
+
+        self.edit_team_button.clicked.connect(
+            self._on_edit_team
+        )
+
+
         self.delete_team_button = QPushButton(
             "Supprimer l'équipe",
             self
@@ -367,6 +377,10 @@ class LaunchWindow(QMainWindow):
             self._on_analyze_team
         )
 
+
+        teams_actions_row.addWidget(
+            self.edit_team_button
+        )
 
         teams_actions_row.addWidget(
             self.delete_team_button
@@ -630,6 +644,64 @@ class LaunchWindow(QMainWindow):
 
 
         dialog.exec()
+
+
+    def _on_edit_team(self) -> None:
+
+        item = self.teams_list.currentItem()
+
+        team_id = (
+            item.data(
+                Qt.ItemDataRole.UserRole
+            )
+            if item is not None
+            else None
+        )
+
+        if team_id is None:
+
+            QMessageBox.information(
+                self,
+                "Aucune sélection",
+                "Sélectionnez une équipe dans la liste."
+            )
+
+            return
+
+        team = self.database.get_team(team_id)
+
+        if team is None:
+
+            return
+
+        from ui.setup.team_edit_dialog import TeamEditDialog
+
+        dialog = TeamEditDialog(team, self)
+
+        if dialog.exec() != TeamEditDialog.DialogCode.Accepted:
+
+            return
+
+        name = dialog.team_name()
+
+        if not name:
+
+            QMessageBox.warning(
+                self,
+                "Nom invalide",
+                "Le nom de l'équipe ne peut pas être vide."
+            )
+
+            return
+
+        self.database.update_team(
+            team_id,
+            name,
+            dialog.team_color()
+        )
+
+        self._load_teams()
+        self._load_games()
 
 
     def _on_analyze_team(self) -> None:
