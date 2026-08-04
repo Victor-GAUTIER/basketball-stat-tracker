@@ -42,6 +42,8 @@ from ui.analysis.phase_panel import PhasePanel
 from ui.analysis.team_comparison_panel import TeamComparisonPanel
 from ui.analysis.turnover_dialog import TurnoverTypeDialog
 
+from dataclasses import replace
+
 
 
 class AnalysisWindow(QMainWindow):
@@ -778,54 +780,72 @@ class AnalysisWindow(QMainWindow):
     # =====================================================
     def _on_edit_game_players(self):
 
-        """
-        Ouvre un dialogue permettant de cocher/décocher, pour chaque équipe,
-        les joueuses présentes à CE match (indépendamment de l'effectif
-        complet de l'équipe, conservé en base).
-        """
+            """
+            Ouvre un dialogue permettant de cocher/décocher, pour chaque équipe,
+            les joueuses présentes à CE match (indépendamment de l'effectif
+            complet de l'équipe, conservé en base), et de modifier leur numéro
+            de maillot pour ce match précis.
+            """
 
-        from ui.analysis.game_players_dialog import GamePlayersDialog
+            from ui.analysis.game_players_dialog import GamePlayersDialog
 
-        home_roster = (
-            self.database.get_players_by_team(self.home_team.id)
-            if self.home_team
-            else []
-        )
+            home_roster = (
+                self.database.get_players_by_team(self.home_team.id)
+                if self.home_team
+                else []
+            )
 
-        away_roster = (
-            self.database.get_players_by_team(self.away_team.id)
-            if self.away_team
-            else []
-        )
+            away_roster = (
+                self.database.get_players_by_team(self.away_team.id)
+                if self.away_team
+                else []
+            )
 
-        home_present_ids = [p.id for p in self.home_players]
-        away_present_ids = [p.id for p in self.away_players]
+            # Pré-remplit le numéro affiché avec celui déjà utilisé pour CE
+            # match (self.home_players/away_players viennent de
+            # get_game_players, donc déjà résolus), sinon le numéro par défaut
+            # de l'équipe.
+            home_match_numbers = {p.id: p.number for p in self.home_players}
+            away_match_numbers = {p.id: p.number for p in self.away_players}
 
-        dialog = GamePlayersDialog(
-            self.home_team.name if self.home_team else "Domicile",
-            home_roster,
-            home_present_ids,
-            self.away_team.name if self.away_team else "Extérieur",
-            away_roster,
-            away_present_ids,
-            self,
-        )
+            home_roster = [
+                replace(p, number=home_match_numbers.get(p.id, p.number))
+                for p in home_roster
+            ]
+            away_roster = [
+                replace(p, number=away_match_numbers.get(p.id, p.number))
+                for p in away_roster
+            ]
 
-        if dialog.exec() != GamePlayersDialog.DialogCode.Accepted:
+            home_present_ids = [p.id for p in self.home_players]
+            away_present_ids = [p.id for p in self.away_players]
 
-            return
+            dialog = GamePlayersDialog(
+                self.home_team.name if self.home_team else "Domicile",
+                home_roster,
+                home_present_ids,
+                self.away_team.name if self.away_team else "Extérieur",
+                away_roster,
+                away_present_ids,
+                self,
+            )
 
-        self.database.set_game_players(
-            self.controller.game_id,
-            dialog.present_player_ids(),
-        )
+            if dialog.exec() != GamePlayersDialog.DialogCode.Accepted:
 
-        self._load_game_data()
+                return
 
-        self.statusBar().showMessage(
-            "Joueuses présentes mises à jour",
-            3000
-        )
+            self.database.set_game_players(
+                self.controller.game_id,
+                dialog.present_player_ids(),
+                dialog.present_player_numbers(),
+            )
+
+            self._load_game_data()
+
+            self.statusBar().showMessage(
+                "Joueuses présentes mises à jour",
+                3000
+            )
 
     def _compute_score(self):
         """Calcule le score des deux équipes à partir des tirs marqués."""

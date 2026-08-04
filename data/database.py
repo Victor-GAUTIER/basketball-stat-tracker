@@ -9,7 +9,7 @@ passer par les méthodes de la classe Database.
 from __future__ import annotations
 
 import sqlite3
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from data.models import Event, Game, Player, Team
 
@@ -55,6 +55,7 @@ CREATE TABLE IF NOT EXISTS game_teams (
 CREATE TABLE IF NOT EXISTS game_players (
     game_id   INTEGER NOT NULL,
     player_id INTEGER NOT NULL,
+    number    INTEGER,
     PRIMARY KEY (game_id, player_id),
     FOREIGN KEY (game_id) REFERENCES games (id) ON DELETE CASCADE,
     FOREIGN KEY (player_id) REFERENCES players (id) ON DELETE CASCADE
@@ -122,12 +123,12 @@ class Database:
             )
             self._connection.commit()
 
-        cur = self._connection.execute("PRAGMA table_info(teams)")
-        existing_team_columns = {row["name"] for row in cur.fetchall()}
+        cur = self._connection.execute("PRAGMA table_info(game_players)")
+        existing_game_player_columns = {row["name"] for row in cur.fetchall()}
 
-        if "color" not in existing_team_columns:
+        if "number" not in existing_game_player_columns:
             self._connection.execute(
-                "ALTER TABLE teams ADD COLUMN color TEXT"
+                "ALTER TABLE game_players ADD COLUMN number INTEGER"
             )
             self._connection.commit()
 
@@ -264,7 +265,8 @@ class Database:
         name: str,
         number: int
     ) -> None:
-        """Modifie le nom et le numéro d'une joueuse."""
+        """Modifie le nom et le numéro par défaut d'une joueuse (utilisé
+        pour tout match ne définissant pas de numéro spécifique)."""
 
         self.connection.execute(
             """
@@ -306,6 +308,19 @@ class Database:
             for r in cur.fetchall()
         ]
 
+    def get_games_for_team(self, team_id: int) -> List[Game]:
+        """Retourne tous les matchs auxquels une équipe a participé."""
+        cur = self.connection.execute(
+            "SELECT g.id, g.name, g.date, g.video_path FROM games g "
+            "JOIN game_teams gt ON gt.game_id = g.id "
+            "WHERE gt.team_id = ? ORDER BY g.date",
+            (team_id,),
+        )
+        return [
+            Game(id=r["id"], name=r["name"], date=r["date"], video_path=r["video_path"])
+            for r in cur.fetchall()
+        ]
+
     def link_game_team(self, game_id: int, team_id: int, is_home: bool) -> None:
         self.connection.execute(
             "INSERT OR REPLACE INTO game_teams (game_id, team_id, is_home) "
@@ -330,10 +345,22 @@ class Database:
             for r in cur.fetchall()
         ]
 
-    def link_game_player(self, game_id: int, player_id: int) -> None:
+    def link_game_player(
+        self,
+        game_id: int,
+        player_id: int,
+        number: Optional[int] = None,
+    ) -> None:
+        """Associe une joueuse à un match, avec un numéro de maillot
+        optionnel propre à CE match (None = numéro par défaut de l'équipe).
+
+        Si la joueuse est déjà liée à ce match, son numéro est mis à jour.
+        """
         self.connection.execute(
-            "INSERT OR IGNORE INTO game_players (game_id, player_id) VALUES (?, ?)",
-            (game_id, player_id),
+            "INSERT INTO game_players (game_id, player_id, number) "
+            "VALUES (?, ?, ?) "
+            "ON CONFLICT(game_id, player_id) DO UPDATE SET number = excluded.number",
+            (game_id, player_id, number),
         )
         self.connection.commit()
 
@@ -345,31 +372,75 @@ class Database:
         )
         self.connection.commit()
 
-    def set_game_players(self, game_id: int, player_ids: List[int]) -> None:
+    def set_game_players(
+        self,
+        game_id: int,
+        player_ids: List[int],
+        numbers: Optional[Dict[int, int]] = None,
+    ) -> None:
         """Remplace la liste des joueurs présents à un match par `player_ids`.
+
+        `numbers`, optionnel, associe player_id -> numéro de maillot propre
+        à CE match ; une joueuse absente de ce dict garde le numéro par
+        défaut de son équipe (voir get_game_players).
 
         À utiliser depuis l'écran de création/édition de match, une fois que
         l'utilisateur a coché les joueuses présentes des deux équipes.
         """
+        numbers = numbers or {}
+
         self.connection.execute(
             "DELETE FROM game_players WHERE game_id = ?", (game_id,)
         )
         self.connection.executemany(
-            "INSERT OR IGNORE INTO game_players (game_id, player_id) VALUES (?, ?)",
-            [(game_id, player_id) for player_id in player_ids],
+            "INSERT INTO game_players (game_id, player_id, number) VALUES (?, ?, ?)",
+            [
+                (game_id, player_id, numbers.get(player_id))
+                for player_id in player_ids
+            ],
+        )
+        self.connection.commit()
+
+    def update_game_player_number(
+        self,
+        game_id: int,
+        player_id: int,
+        number: Optional[int],
+    ) -> None:
+        """Modifie le numéro de maillot d'une joueuse pour CE match
+        uniquement (le numéro par défaut de l'équipe n'est pas touché).
+        `number` à None réinitialise sur le numéro par défaut de l'équipe.
+        """
+        self.connection.execute(
+            "UPDATE game_players SET number = ? WHERE game_id = ? AND player_id = ?",
+            (number, game_id, player_id),
         )
         self.connection.commit()
 
     def get_game_players(self, game_id: int, team_id: int) -> List[Player]:
-        """Retourne les joueurs d'une équipe qui participent effectivement à ce match."""
+        """Retourne les joueuses d'une équipe présentes à ce match, avec
+        leur numéro de maillot pour CE match (numéro par défaut de
+        l'équipe si aucun numéro spécifique n'a été défini pour ce match)."""
         cur = self.connection.execute(
-            "SELECT p.id, p.team_id, p.name, p.number FROM players p "
+            "SELECT p.id, p.team_id, p.name, p.number AS default_number, "
+            "gp.number AS match_number "
+            "FROM players p "
             "JOIN game_players gp ON gp.player_id = p.id "
-            "WHERE gp.game_id = ? AND p.team_id = ? ORDER BY p.number",
+            "WHERE gp.game_id = ? AND p.team_id = ? "
+            "ORDER BY COALESCE(gp.number, p.number)",
             (game_id, team_id),
         )
         return [
-            Player(id=r["id"], team_id=r["team_id"], name=r["name"], number=r["number"])
+            Player(
+                id=r["id"],
+                team_id=r["team_id"],
+                name=r["name"],
+                number=(
+                    r["match_number"]
+                    if r["match_number"] is not None
+                    else r["default_number"]
+                ),
+            )
             for r in cur.fetchall()
         ]
 
@@ -500,9 +571,9 @@ class Database:
         )
 
     def delete_game(self, game_id: int) -> None:
-            """Supprime un match (et en cascade ses liens équipes/joueurs et ses événements)."""
-            self.connection.execute("DELETE FROM games WHERE id = ?", (game_id,))
-            self.connection.commit()
+        """Supprime un match (et en cascade ses liens équipes/joueurs et ses événements)."""
+        self.connection.execute("DELETE FROM games WHERE id = ?", (game_id,))
+        self.connection.commit()
 
     def swap_home_away(self, game_id: int) -> None:
         """Inverse le statut domicile/extérieur des deux équipes d'un match."""
@@ -511,16 +582,3 @@ class Database:
             (game_id,),
         )
         self.connection.commit()
-
-    def get_games_for_team(self, team_id: int) -> List[Game]:
-        """Retourne tous les matchs auxquels une équipe a participé."""
-        cur = self.connection.execute(
-            "SELECT g.id, g.name, g.date, g.video_path FROM games g "
-            "JOIN game_teams gt ON gt.game_id = g.id "
-            "WHERE gt.team_id = ? ORDER BY g.date",
-            (team_id,),
-        )
-        return [
-            Game(id=r["id"], name=r["name"], date=r["date"], video_path=r["video_path"])
-            for r in cur.fetchall()
-        ]
