@@ -8,10 +8,42 @@ affichées en direct.
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import Dict, List, Optional, Tuple
+from dataclasses import dataclass, field
+from typing import Dict, List, Optional, Set, Tuple
 
 from data.database import Database
 from data.models import Event, Game, Player, Team
+
+# Réutilisation des briques de calcul déjà utilisées pour le tableau de
+# bord d'équipe (team_analysis_controller), afin d'éviter de dupliquer la
+# logique d'agrégation des statistiques "boxscore".
+from controller.team_analysis_controller import (
+    TeamBoxScore,
+    _apply_event_to_box,
+    _is_turnover,
+    _points,
+)
+
+
+SHOT_TYPES = ("2PTS_MADE", "2PTS_MISSED", "3PTS_MADE", "3PTS_MISSED")
+
+
+@dataclass
+class TeamComparisonData:
+    """Statistiques détaillées des deux équipes pour le match en cours,
+    utilisées par l'onglet "Comparaison" (TeamComparisonPanel)."""
+
+    home_box: TeamBoxScore = field(default_factory=TeamBoxScore)
+    away_box: TeamBoxScore = field(default_factory=TeamBoxScore)
+
+    home_points_by_action: Dict[str, int] = field(default_factory=dict)
+    away_points_by_action: Dict[str, int] = field(default_factory=dict)
+
+    home_fga_by_action: Dict[str, int] = field(default_factory=dict)
+    away_fga_by_action: Dict[str, int] = field(default_factory=dict)
+
+    home_turnover_breakdown: Dict[str, int] = field(default_factory=dict)
+    away_turnover_breakdown: Dict[str, int] = field(default_factory=dict)
 
 
 class AnalysisController:
@@ -256,3 +288,79 @@ class AnalysisController:
 
 
         return dict(totals)
+
+    # =====================================================
+    # Statistiques détaillées pour l'onglet "Comparaison"
+    # =====================================================
+
+    def get_team_comparison_data(
+        self,
+        home_player_ids: Set[int],
+        away_player_ids: Set[int],
+    ) -> TeamComparisonData:
+        """Calcule, pour le match en cours, les statistiques "boxscore"
+        détaillées (four factors, points par action, tirs par action,
+        répartition des pertes de balle) des deux équipes.
+
+        Réutilise la même logique d'agrégation que le tableau de bord
+        d'équipe (controller.team_analysis_controller), mais appliquée à un
+        seul match plutôt qu'à l'historique complet d'une équipe.
+        """
+
+        data = TeamComparisonData()
+
+        home_points_by_action: Dict[str, int] = defaultdict(int)
+        away_points_by_action: Dict[str, int] = defaultdict(int)
+
+        home_fga_by_action: Dict[str, int] = defaultdict(int)
+        away_fga_by_action: Dict[str, int] = defaultdict(int)
+
+        home_turnover_breakdown: Dict[str, int] = defaultdict(int)
+        away_turnover_breakdown: Dict[str, int] = defaultdict(int)
+
+        for event in self.get_events():
+
+            is_home = event.player_id in home_player_ids
+
+            box = data.home_box if is_home else data.away_box
+
+            points_by_action = (
+                home_points_by_action if is_home else away_points_by_action
+            )
+            fga_by_action = (
+                home_fga_by_action if is_home else away_fga_by_action
+            )
+            turnover_breakdown = (
+                home_turnover_breakdown if is_home else away_turnover_breakdown
+            )
+
+            pts = _points(event.event_type)
+
+            _apply_event_to_box(box, event, pts)
+
+            action = event.action_type or "Non renseigné"
+
+            if pts > 0:
+                points_by_action[action] += pts
+
+            if event.event_type in SHOT_TYPES:
+                fga_by_action[action] += 1
+
+            if _is_turnover(event.event_type):
+                to_label = (
+                    event.event_type.replace("TO_", "")
+                    if event.event_type.startswith("TO_")
+                    else "AUTRE"
+                )
+                turnover_breakdown[to_label] += 1
+
+        data.home_points_by_action = dict(home_points_by_action)
+        data.away_points_by_action = dict(away_points_by_action)
+
+        data.home_fga_by_action = dict(home_fga_by_action)
+        data.away_fga_by_action = dict(away_fga_by_action)
+
+        data.home_turnover_breakdown = dict(home_turnover_breakdown)
+        data.away_turnover_breakdown = dict(away_turnover_breakdown)
+
+        return data

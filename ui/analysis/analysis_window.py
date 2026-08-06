@@ -1298,6 +1298,11 @@ class AnalysisWindow(QMainWindow):
             self.shot_chart_summary_panel.set_team_colors(
                 self.home_team.color, self.away_team.color
             )
+            # Le terrain de saisie des tirs reprend lui aussi les couleurs
+            # des deux équipes (au lieu du bleu/orange fixe par défaut).
+            self.shot_chart.set_team_colors(
+                self.home_team.color, self.away_team.color
+            )
 
         # -------------------------
         # Joueurs
@@ -1953,6 +1958,18 @@ class AnalysisWindow(QMainWindow):
             else "Extérieur"
         )
 
+        home_color = (
+            self.home_team.color
+            if self.home_team
+            else "#2980b9"
+        )
+
+        away_color = (
+            self.away_team.color
+            if self.away_team
+            else "#e67e22"
+        )
+
         self.playbyplay_panel.refresh(
 
             events,
@@ -1985,14 +2002,25 @@ class AnalysisWindow(QMainWindow):
 
         )
 
+        home_player_ids = {p.id for p in self.home_players}
+        away_player_ids = {p.id for p in self.away_players}
+
+        comparison_data = self.controller.get_team_comparison_data(
+            home_player_ids,
+            away_player_ids,
+        )
+
         self.team_comparison_panel.refresh(
             home_name,
             away_name,
+            home_color,
+            away_color,
             self._compute_quarter_scores(),
             self._aggregate_team_stats(self.home_players, player_stats),
             self._aggregate_team_stats(self.away_players, player_stats),
             self._compute_leaders(self.home_players, player_stats),
             self._compute_leaders(self.away_players, player_stats),
+            comparison_data,
         )
 
         self.shot_chart_summary_panel.set_team_labels(

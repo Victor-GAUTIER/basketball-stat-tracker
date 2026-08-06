@@ -21,6 +21,9 @@ class ShotChartWidget(QWidget):
     shot_clicked = Signal(float, float, bool)
 
 
+    # Couleurs par défaut (utilisées tant qu'aucune couleur d'équipe n'a
+    # été fournie via set_team_colors, ex. avant le premier chargement de
+    # match). L'alpha réduit permet de garder le terrain lisible en-dessous.
     LEFT_SIDE_COLOR = QColor(
         52,
         152,
@@ -65,6 +68,12 @@ class ShotChartWidget(QWidget):
         self._home_attacks_right = True
         self._home_label = "Domicile"
         self._away_label = "Extérieur"
+
+        # Couleurs des équipes (semi-transparentes), utilisées pour teinter
+        # la moitié de terrain attaquée par chacune. Par défaut, on retombe
+        # sur les couleurs historiques bleu/orange.
+        self._home_color = QColor(self.LEFT_SIDE_COLOR)
+        self._away_color = QColor(self.RIGHT_SIDE_COLOR)
 
         self.last_shot = None
 
@@ -199,6 +208,25 @@ class ShotChartWidget(QWidget):
 
 
     # =====================================================
+    # Couleurs des équipes
+    # =====================================================
+
+    def set_team_colors(self, home_color: str, away_color: str) -> None:
+        """Met à jour les couleurs utilisées pour teinter les demi-terrains,
+        à partir des couleurs (hex) des équipes du match. Un alpha réduit
+        est appliqué pour que le terrain reste lisible en-dessous."""
+
+        self._home_color = QColor(home_color)
+        self._home_color.setAlpha(70)
+
+        self._away_color = QColor(away_color)
+        self._away_color.setAlpha(70)
+
+        self.update()
+
+
+
+    # =====================================================
     # Dessin
     # =====================================================
 
@@ -248,13 +276,13 @@ class ShotChartWidget(QWidget):
 
         if self._home_attacks_right:
 
-            left_color = self.RIGHT_SIDE_COLOR
-            right_color = self.LEFT_SIDE_COLOR
+            left_color = self._away_color
+            right_color = self._home_color
 
         else:
 
-            left_color = self.LEFT_SIDE_COLOR
-            right_color = self.RIGHT_SIDE_COLOR
+            left_color = self._home_color
+            right_color = self._away_color
 
 
 
@@ -330,110 +358,6 @@ class ShotChartWidget(QWidget):
                 3,
                 3
             )
-
-        # ==========================
-        # Zone verte 2 points
-        # ==========================
-
-        # params = self.court_parameters()
-
-
-        # painter.setBrush(
-        #     QColor(
-        #         0,
-        #         255,
-        #         0,
-        #         70
-        #     )
-        # )
-
-
-        # painter.setPen(
-        #     QPen(
-        #         QColor(0,180,0),
-        #         2
-        #     )
-        # )
-
-
-        # # rectangles
-
-        # painter.drawRect(
-        #     QRectF(
-        #         geometry["x_offset"],
-        #         geometry["y_offset"]
-        #         +
-        #         params["paint_y_min"]
-        #         *
-        #         geometry["h"],
-
-        #         params["paint_x"]
-        #         *
-        #         geometry["w"],
-
-        #         (
-        #             params["paint_y_max"]
-        #             -
-        #             params["paint_y_min"]
-        #         )
-        #         *
-        #         geometry["h"]
-        #     )
-        # )
-
-
-        # painter.drawRect(
-        #     QRectF(
-        #         geometry["x_offset"]
-        #         +
-        #         (
-        #             1
-        #             -
-        #             params["paint_x"]
-        #         )
-        #         *
-        #         geometry["w"],
-
-        #         geometry["y_offset"]
-        #         +
-        #         params["paint_y_min"]
-        #         *
-        #         geometry["h"],
-
-        #         params["paint_x"]
-        #         *
-        #         geometry["w"],
-
-        #         (
-        #             params["paint_y_max"]
-        #             -
-        #             params["paint_y_min"]
-        #         )
-        #         *
-        #         geometry["h"]
-        #     )
-        # )
-
-
-
-        # # demi cercles
-
-        # r = geometry["radius"]
-
-
-        # for bx, by in [
-        #     geometry["left_basket"],
-        #     geometry["right_basket"]
-        # ]:
-
-        #     painter.drawArc(
-        #         int(bx-r),
-        #         int(by-r),
-        #         int(r*2),
-        #         int(r*2),
-        #         0,
-        #         360*16
-        #     )
 
 
     # =====================================================
