@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
     QComboBox,
     QDoubleSpinBox,
     QHBoxLayout,
+    QInputDialog,
     QLabel,
     QPushButton,
     QTableWidget,
@@ -52,6 +53,8 @@ class PlayByPlayPanel(QWidget):
     event_seek_requested = Signal(float)
 
     export_requested = Signal(list, float, float)
+
+    bulk_quarter_edit_requested = Signal(list, int)
 
     def __init__(
         self,
@@ -163,6 +166,10 @@ class PlayByPlayPanel(QWidget):
             QAbstractItemView.SelectionBehavior.SelectRows
         )
 
+        self.table.setSelectionMode(
+            QAbstractItemView.SelectionMode.ExtendedSelection
+        )
+
         self.table.cellDoubleClicked.connect(
             self._on_double_click
         )
@@ -197,6 +204,17 @@ class PlayByPlayPanel(QWidget):
         export_row.addWidget(self.export_btn)
 
 
+        # -------------------------
+        # Édition groupée (sélection multiple)
+        # -------------------------
+
+        self.bulk_quarter_btn = QPushButton("Modifier le quart-temps de la sélection")
+        self.bulk_quarter_btn.clicked.connect(self._on_bulk_quarter_edit_clicked)
+
+        bulk_edit_row = QHBoxLayout()
+        bulk_edit_row.addWidget(self.bulk_quarter_btn)
+        bulk_edit_row.addStretch()
+
         layout.addLayout(
             filters_row
         )
@@ -204,6 +222,8 @@ class PlayByPlayPanel(QWidget):
         layout.addWidget(
             self.table
         )
+
+        layout.addLayout(bulk_edit_row)
 
         layout.addLayout(export_row)
 
@@ -786,4 +806,40 @@ class PlayByPlayPanel(QWidget):
             list(self._events),
             before,
             after
+        )
+
+    def _on_bulk_quarter_edit_clicked(self):
+
+        selected_rows = sorted({
+            index.row()
+            for index in self.table.selectedIndexes()
+        })
+
+        if not selected_rows:
+            return
+
+        selected_events = [
+            self._events[row]
+            for row in selected_rows
+            if 0 <= row < len(self._events)
+        ]
+
+        if not selected_events:
+            return
+
+        quarter, ok = QInputDialog.getInt(
+            self,
+            "Modifier le quart-temps",
+            f"Nouveau quart-temps pour {len(selected_events)} événement(s) :",
+            value=selected_events[0].quarter,
+            minValue=1,
+            maxValue=5,
+        )
+
+        if not ok:
+            return
+
+        self.bulk_quarter_edit_requested.emit(
+            [e.id for e in selected_events],
+            quarter,
         )

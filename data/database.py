@@ -522,6 +522,17 @@ class Database:
         )
         self.connection.commit()
 
+    def update_events_quarter(self, event_ids: List[int], quarter: int) -> None:
+        """Modifie le quart-temps de plusieurs événements en une seule fois
+        (édition groupée depuis le Play by play), sans toucher aux autres
+        champs de ces événements."""
+
+        self.connection.executemany(
+            "UPDATE events SET quarter = ? WHERE id = ?",
+            [(quarter, event_id) for event_id in event_ids],
+        )
+        self.connection.commit()
+
     def get_events_for_game(self, game_id: int) -> List[Event]:
         cur = self.connection.execute(
             "SELECT id, game_id, player_id, timestamp, quarter, event_type, "

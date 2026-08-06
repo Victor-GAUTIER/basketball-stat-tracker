@@ -473,6 +473,10 @@ class AnalysisWindow(QMainWindow):
             self._on_export_video_requested
         )
 
+        self.playbyplay_panel.bulk_quarter_edit_requested.connect(
+            self._on_bulk_quarter_edit
+        )
+
     # =====================================================
     # Menu
     # =====================================================
@@ -1742,7 +1746,16 @@ class AnalysisWindow(QMainWindow):
 
         self._refresh_data()
 
+    def _on_bulk_quarter_edit(self, event_ids, quarter):
 
+        self.database.update_events_quarter(event_ids, quarter)
+
+        self._refresh_data()
+
+        self.statusBar().showMessage(
+            f"Quart-temps mis à jour pour {len(event_ids)} événement(s)",
+            3000
+        )
 
     # =====================================================
     # Double clic Play by Play
