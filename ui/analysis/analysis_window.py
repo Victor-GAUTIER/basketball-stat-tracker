@@ -117,6 +117,13 @@ class AnalysisWindow(QMainWindow):
 
         self._load_game_data()
 
+        for i in range(self.tabs.count()):
+            widget = self.tabs.widget(i)
+            print(
+                self.tabs.tabText(i),
+                "minimumSizeHint:", widget.minimumSizeHint().width(),
+                "sizeHint:", widget.sizeHint().width(),
+            )
 
         self.setStatusBar(
             QStatusBar(self)

@@ -50,6 +50,10 @@ from data.models import Player
 DEFAULT_HOME_COLOR = "#2980b9"
 DEFAULT_AWAY_COLOR = "#e67e22"
 
+# Couleurs pour le mode sombre : fond des figures/cartes et texte.
+FIGURE_BG_COLOR = "#3a3a3a"
+FIGURE_TEXT_COLOR = "#f0f0f0"
+
 
 # Statistiques affichées comme barres de comparaison tête-à-tête, dans
 # l'onglet Overview (clé_dans_team_stats, libellé, "pct" ou "count").
@@ -96,12 +100,28 @@ def _clear_layout(layout: QVBoxLayout) -> None:
             widget.deleteLater()
 
 
+def _style_axes(ax) -> None:
+    """Applique le style sombre (fond gris, texte blanc) à un axe
+    matplotlib : fond, titre, labels d'axes, ticks et bordures."""
+
+    ax.set_facecolor(FIGURE_BG_COLOR)
+
+    ax.title.set_color(FIGURE_TEXT_COLOR)
+    ax.xaxis.label.set_color(FIGURE_TEXT_COLOR)
+    ax.yaxis.label.set_color(FIGURE_TEXT_COLOR)
+
+    ax.tick_params(colors=FIGURE_TEXT_COLOR)
+
+    for spine in ax.spines.values():
+        spine.set_color(FIGURE_TEXT_COLOR)
+
+
 def _make_canvas(figure: Figure) -> QWidget:
 
-    figure.patch.set_facecolor("none")
+    figure.patch.set_facecolor(FIGURE_BG_COLOR)
 
     canvas = FigureCanvas(figure)
-    canvas.setStyleSheet("background: transparent;")
+    canvas.setStyleSheet(f"background: {FIGURE_BG_COLOR};")
 
     container = QWidget()
     layout = QVBoxLayout(container)
@@ -125,7 +145,7 @@ def _build_stat_row(stats: List[Tuple[str, str, Optional[str]]]) -> QWidget:
 
         card = QWidget()
         card.setStyleSheet(
-            "QWidget { background-color: #f2f2f2; border-radius: 10px; }"
+            f"QWidget {{ background-color: {FIGURE_BG_COLOR}; border-radius: 10px; }}"
         )
 
         card_layout = QVBoxLayout(card)
@@ -133,13 +153,13 @@ def _build_stat_row(stats: List[Tuple[str, str, Optional[str]]]) -> QWidget:
         value_label = QLabel(value)
         value_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         value_label.setStyleSheet(
-            f"color:{color or '#222'}; font-size:20px; font-weight:bold;"
+            f"color:{color or FIGURE_TEXT_COLOR}; font-size:20px; font-weight:bold;"
         )
 
         caption_label = QLabel(label)
         caption_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         caption_label.setWordWrap(True)
-        caption_label.setStyleSheet("color:#666; font-size:11px;")
+        caption_label.setStyleSheet(f"color:{FIGURE_TEXT_COLOR}; font-size:11px;")
 
         card_layout.addWidget(value_label)
         card_layout.addWidget(caption_label)
@@ -151,8 +171,10 @@ def _build_stat_row(stats: List[Tuple[str, str, Optional[str]]]) -> QWidget:
 
 def _plot_pie(ax, data: Dict[str, float], title: str) -> None:
 
+    _style_axes(ax)
+
     if not data:
-        ax.set_title(title)
+        ax.set_title(title, color=FIGURE_TEXT_COLOR)
         ax.axis("off")
         return
 
@@ -163,10 +185,10 @@ def _plot_pie(ax, data: Dict[str, float], title: str) -> None:
         values,
         labels=labels,
         autopct="%1.0f%%",
-        textprops={"fontsize": 8},
+        textprops={"fontsize": 8, "color": FIGURE_TEXT_COLOR},
     )
 
-    ax.set_title(title, fontsize=10, fontweight="bold")
+    ax.set_title(title, fontsize=10, fontweight="bold", color=FIGURE_TEXT_COLOR)
 
 
 def _plot_pie_2(
@@ -180,10 +202,12 @@ def _plot_pie_2(
     title: str,
 ) -> None:
 
+    _style_axes(ax)
+
     total = val1 + val2
 
     if total <= 0:
-        ax.set_title(title)
+        ax.set_title(title, color=FIGURE_TEXT_COLOR)
         ax.axis("off")
         return
 
@@ -203,11 +227,14 @@ def _plot_pie_2(
         autotext.set_fontweight("bold")
         autotext.set_fontsize(13)
 
+    # Les libellés (noms d'équipes) restent dans la couleur de l'équipe
+    # correspondante pour rester lisibles sur fond gris et garder
+    # l'association visuelle avec les couleurs domicile/extérieur.
     for text, color in zip(texts, colors):
         text.set_color(color)
         text.set_fontweight("bold")
 
-    ax.set_title(title, fontsize=11, fontweight="bold")
+    ax.set_title(title, fontsize=11, fontweight="bold", color=FIGURE_TEXT_COLOR)
 
 
 def _plot_grouped_bar(
@@ -219,8 +246,10 @@ def _plot_grouped_bar(
     colors: Optional[List[str]] = None,
 ) -> None:
 
+    _style_axes(ax)
+
     if not labels:
-        ax.set_title(title, fontsize=10)
+        ax.set_title(title, fontsize=10, color=FIGURE_TEXT_COLOR)
         ax.axis("off")
         return
 
@@ -245,13 +274,18 @@ def _plot_grouped_bar(
                 ha="center",
                 va="bottom",
                 fontsize=7,
+                color=FIGURE_TEXT_COLOR,
             )
 
     ax.set_xticks(x)
-    ax.set_xticklabels(labels, rotation=20, ha="right", fontsize=8)
-    ax.set_title(title, fontsize=10, fontweight="bold")
-    ax.set_ylabel(ylabel)
-    ax.legend(fontsize=8)
+    ax.set_xticklabels(labels, rotation=20, ha="right", fontsize=8, color=FIGURE_TEXT_COLOR)
+    ax.set_title(title, fontsize=10, fontweight="bold", color=FIGURE_TEXT_COLOR)
+    ax.set_ylabel(ylabel, color=FIGURE_TEXT_COLOR)
+
+    legend = ax.legend(fontsize=8)
+    legend.get_frame().set_facecolor(FIGURE_BG_COLOR)
+    for text in legend.get_texts():
+        text.set_color(FIGURE_TEXT_COLOR)
 
 
 # =====================================================

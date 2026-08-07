@@ -86,55 +86,65 @@ class PlayByPlayPanel(QWidget):
                 self._apply_filters
             )
 
-        filters_row = QHBoxLayout()
+        filters_row_1 = QHBoxLayout()
 
-        filters_row.addWidget(
+        filters_row_1.addWidget(
             QLabel("Équipe :")
         )
 
-        filters_row.addWidget(
+        filters_row_1.addWidget(
             self.team_filter
         )
 
-        filters_row.addWidget(
+        filters_row_1.addWidget(
             QLabel("Joueuse :")
         )
 
-        filters_row.addWidget(
+        filters_row_1.addWidget(
             self.player_filter
         )
 
-        filters_row.addWidget(
+        filters_row_1.addWidget(
             QLabel("Événement :")
         )
 
-        filters_row.addWidget(
+        filters_row_1.addWidget(
             self.event_filter
         )
 
-        filters_row.addWidget(
+        filters_row_1.addStretch()
+
+        filters_row_2 = QHBoxLayout()
+
+        filters_row_2.addWidget(
             QLabel("Phase :")
         )
 
-        filters_row.addWidget(
+        filters_row_2.addWidget(
             self.phase_filter
         )
 
-        filters_row.addWidget(
+        filters_row_2.addWidget(
             QLabel("Système :")
         )
 
-        filters_row.addWidget(
+        filters_row_2.addWidget(
             self.system_filter
         )
 
-        filters_row.addWidget(
+        filters_row_2.addWidget(
             QLabel("Type d'action :")
         )
 
-        filters_row.addWidget(
+        filters_row_2.addWidget(
             self.action_type_filter
         )
+
+        filters_row_2.addStretch()
+
+        filters_column = QVBoxLayout()
+        filters_column.addLayout(filters_row_1)
+        filters_column.addLayout(filters_row_2)
 
         # -------------------------
         # Tableau
@@ -216,7 +226,7 @@ class PlayByPlayPanel(QWidget):
         bulk_edit_row.addStretch()
 
         layout.addLayout(
-            filters_row
+            filters_column
         )
 
         layout.addWidget(
