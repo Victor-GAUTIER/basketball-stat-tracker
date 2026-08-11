@@ -1077,6 +1077,10 @@ class AnalysisWindow(QMainWindow):
             ),
 
 
+            (
+                "M",
+                self._on_toggle_mute
+            ),
 
             *[
                 (
@@ -1117,7 +1121,13 @@ class AnalysisWindow(QMainWindow):
                 shortcut
             )
 
+    def _on_toggle_mute(self):
 
+            """
+            Coupe / réactive le son de la vidéo, avec un petit retour visuel.
+            """
+
+            self.video_panel.toggle_mute()
 
     # =====================================================
     # Popup temporaire (toast)

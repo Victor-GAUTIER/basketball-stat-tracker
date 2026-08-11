@@ -266,13 +266,13 @@ class LaunchWindow(QMainWindow):
         actions_row = QHBoxLayout()
 
 
-        self.open_button = QPushButton(
-            "Ouvrir la sélection",
+        self.edit_game_button = QPushButton(
+            "Modifier le match",
             self
         )
 
-        self.open_button.clicked.connect(
-            self._on_open_selected
+        self.edit_game_button.clicked.connect(
+            self._on_edit_game
         )
 
 
@@ -286,27 +286,12 @@ class LaunchWindow(QMainWindow):
         )
 
 
-        self.refresh_button = QPushButton(
-            "Actualiser la liste",
-            self
-        )
-
-        self.refresh_button.clicked.connect(
-            self._load_games
-        )
-
-
         actions_row.addWidget(
-            self.open_button
+            self.edit_game_button
         )
 
         actions_row.addWidget(
             self.delete_game_button
-        )
-
-
-        actions_row.addWidget(
-            self.refresh_button
         )
 
 
@@ -560,6 +545,60 @@ class LaunchWindow(QMainWindow):
         # on garde la fenêtre en mémoire
         # pour pouvoir revenir dessus
         self.hide()
+
+
+
+    def _on_edit_game(self) -> None:
+
+        item = self.games_list.currentItem()
+
+
+        game_id = (
+            item.data(
+                Qt.ItemDataRole.UserRole
+            )
+            if item is not None
+            else None
+        )
+
+
+        if game_id is None:
+
+            QMessageBox.information(
+                self,
+                "Aucune sélection",
+                "Sélectionnez un match dans la liste."
+            )
+
+            return
+
+
+        game = self.database.get_game(
+            game_id
+        )
+
+
+        if game is None:
+
+            return
+
+
+        from ui.setup.game_edit_dialog import EditGameDialog
+
+
+        dialog = EditGameDialog(
+            self.database,
+            game,
+            self
+        )
+
+
+        if dialog.exec() != EditGameDialog.DialogCode.Accepted:
+
+            return
+
+
+        self._load_games()
 
 
 

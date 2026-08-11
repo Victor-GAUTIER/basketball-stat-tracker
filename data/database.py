@@ -132,6 +132,18 @@ class Database:
             )
             self._connection.commit()
 
+        # Index (non contraignant) sur (team_id, name), pour accélérer la
+        # recherche d'une joueuse par son identité (voir get_or_create_player).
+        # Volontairement PAS de contrainte UNIQUE : une base déjà existante
+        # peut contenir des doublons de nom hérités de l'ancien système
+        # d'identification par numéro, et on ne veut pas faire planter la
+        # migration pour ça.
+        self._connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_players_team_name "
+            "ON players (team_id, name)"
+        )
+        self._connection.commit()
+
     @property
     def connection(self) -> sqlite3.Connection:
         assert self._connection is not None
@@ -215,19 +227,29 @@ class Database:
     # Joueurs
     # ------------------------------------------------------------------
     def get_or_create_player(self, team_id: int, name: str, number: int) -> int:
-        """Retourne l'id du joueur (team_id, number), en le créant si besoin.
+        """Retourne l'id du joueur (team_id, name), en le créant si besoin.
 
-        Si le joueur existe déjà (même équipe, même numéro), son nom est mis
-        à jour au cas où il aurait changé.
+        L'identité d'une joueuse est définie par son ÉQUIPE et son NOM, et
+        non plus par son numéro de maillot : le numéro peut changer d'un
+        match (voire d'une saison) à l'autre, alors que le nom, lui, reste
+        stable. Se baser sur le numéro exposait à un bug sérieux : créer
+        une nouvelle joueuse avec le numéro d'une joueuse déjà existante
+        renommait silencieusement cette dernière (même id, donc même
+        historique de stats) au lieu de créer une entrée distincte.
+
+        Si une joueuse portant ce nom existe déjà dans cette équipe, son
+        numéro est mis à jour (au cas où il aurait changé) et son id est
+        réutilisé, ce qui conserve tout son historique d'événements.
+        Sinon, une nouvelle joueuse est créée.
         """
         cur = self.connection.execute(
-            "SELECT id FROM players WHERE team_id = ? AND number = ?",
-            (team_id, number),
+            "SELECT id FROM players WHERE team_id = ? AND name = ?",
+            (team_id, name),
         )
         row = cur.fetchone()
         if row is not None:
             self.connection.execute(
-                "UPDATE players SET name = ? WHERE id = ?", (name, row["id"])
+                "UPDATE players SET number = ? WHERE id = ?", (number, row["id"])
             )
             self.connection.commit()
             return int(row["id"])
@@ -298,6 +320,18 @@ class Database:
         if r is None:
             return None
         return Game(id=r["id"], name=r["name"], date=r["date"], video_path=r["video_path"])
+
+    def update_game(
+        self, game_id: int, name: str, date: str, video_path: str
+    ) -> None:
+        """Modifie les informations générales d'un match déjà enregistré
+        (nom, date, chemin de la vidéo)."""
+
+        self.connection.execute(
+            "UPDATE games SET name = ?, date = ?, video_path = ? WHERE id = ?",
+            (name, date, video_path, game_id),
+        )
+        self.connection.commit()
 
     def get_games(self) -> List[Game]:
         cur = self.connection.execute(
