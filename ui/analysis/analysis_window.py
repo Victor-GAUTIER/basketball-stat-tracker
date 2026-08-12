@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
     QProgressDialog,
+    QApplication,
 )
 
 
@@ -116,6 +117,8 @@ class AnalysisWindow(QMainWindow):
 
         self._register_shortcuts()
 
+        self._setup_space_hold()
+
         self._load_game_data()
 
 
@@ -178,6 +181,114 @@ class AnalysisWindow(QMainWindow):
         self.resize(
             size
         )
+
+
+    # =====================================================
+    # Barre espace : appui bref (lecture/pause) vs maintien (x2)
+    # =====================================================
+
+    def _setup_space_hold(self):
+        """
+        La barre espace a deux comportements distincts, comme sur YouTube :
+        - appui bref : bascule lecture/pause (comportement historique) ;
+        - maintien : lecture à vitesse x2 tant que la touche est enfoncée,
+          puis retour à la vitesse et à l'état (lu/en pause) précédents au
+          relâchement.
+
+        QShortcut ne permet pas de détecter un relâchement de touche, donc
+        on passe par un filtre d'événements clavier installé au niveau de
+        l'application (comme pour le raccourci QShortcut existant, ça
+        fonctionne quel que soit le widget qui a le focus), combiné à un
+        petit timer qui sert de seuil pour distinguer un appui bref d'un
+        maintien.
+        """
+
+        self._space_hold_timer = QTimer(self)
+        self._space_hold_timer.setSingleShot(True)
+        self._space_hold_timer.setInterval(300)  # ms avant de considérer un maintien
+        self._space_hold_timer.timeout.connect(self._activate_space_hold)
+
+        self._space_hold_active = False
+        self._space_was_playing_before_hold = False
+
+        QApplication.instance().installEventFilter(self)
+
+    def eventFilter(self, obj, event):
+
+        is_space_key_event = (
+            event.type() in (QEvent.Type.KeyPress, QEvent.Type.KeyRelease)
+            and event.key() == Qt.Key.Key_Space
+            and not event.isAutoRepeat()
+        )
+
+        # Ne réagit que si CETTE fenêtre est active : évite d'intercepter
+        # la barre espace dans d'autres fenêtres (LaunchWindow...) ou dans
+        # une boîte de dialogue modale ouverte par-dessus (ShotDetailsDialog,
+        # champs de texte...), où l'espace doit garder son comportement
+        # normal.
+        if is_space_key_event and QApplication.activeWindow() is self:
+
+            if event.type() == QEvent.Type.KeyPress:
+
+                self._on_space_pressed()
+
+            else:
+
+                self._on_space_released()
+
+            return True
+
+        return super().eventFilter(obj, event)
+
+    def _on_space_pressed(self):
+
+        if self._space_hold_timer.isActive():
+
+            return
+
+        self._space_hold_active = False
+
+        self._space_hold_timer.start()
+
+    def _activate_space_hold(self):
+
+        self._space_hold_active = True
+
+        self._space_was_playing_before_hold = self.video_panel.is_playing()
+
+        self.video_panel.set_playback_rate(2.0)
+        self.video_panel.play()
+
+    def _on_space_released(self):
+
+        if self._space_hold_timer.isActive():
+
+            # Relâché avant le seuil : c'était un appui bref, pas un
+            # maintien -> comportement historique (lecture/pause).
+            self._space_hold_timer.stop()
+
+            self.video_panel.toggle_play_pause()
+
+            return
+
+        if self._space_hold_active:
+
+            self._space_hold_active = False
+
+            self.video_panel.set_playback_rate(1.0)
+
+            # Retour à l'état précédent : si la vidéo était en pause avant
+            # le maintien, on la remet en pause plutôt que de la laisser
+            # filer en lecture à vitesse normale.
+            if not self._space_was_playing_before_hold:
+
+                self.video_panel.pause()
+
+    def closeEvent(self, event):
+
+        QApplication.instance().removeEventFilter(self)
+
+        super().closeEvent(event)
 
 
     # =====================================================
@@ -1105,11 +1216,6 @@ class AnalysisWindow(QMainWindow):
 
 
         shortcuts = [
-
-            (
-                "Space",
-                self.video_panel.toggle_play_pause
-            ),
 
 
             (

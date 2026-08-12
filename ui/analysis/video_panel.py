@@ -396,6 +396,36 @@ class VideoPanel(QWidget):
 
 
 
+    def play(self):
+
+        self.player.play()
+
+
+
+    def pause(self):
+
+        self.player.pause()
+
+
+
+    def is_playing(self) -> bool:
+
+        return (
+            self.player.playbackState()
+            ==
+            QMediaPlayer.PlaybackState.PlayingState
+        )
+
+
+
+    def set_playback_rate(self, rate: float):
+        """Vitesse de lecture (1.0 = normale, 2.0 = x2...). Utilisé pour le
+        maintien de la barre espace (accélération temporaire à x2)."""
+
+        self.player.setPlaybackRate(rate)
+
+
+
     def toggle_mute(self):
 
         muted = not self.audio_output.isMuted()
