@@ -9,6 +9,8 @@ permet de changer :
 - le système
 - le type d'action
 - le type de perte de balle (si l'événement en est une)
+- les détails de tir : défense subie, rebond offensif préalable, nombre
+  de dribbles (si l'événement est un tir)
 
 L'horodatage reste inchangé.
 """
@@ -18,20 +20,24 @@ from __future__ import annotations
 from typing import List, Optional, Tuple
 
 from PySide6.QtWidgets import (
+    QCheckBox,
     QComboBox,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
+    QSpinBox,
     QWidget,
 )
 
 from data.models import Event, Player
 from ui.analysis.event_labels import EVENT_CHOICES
-from ui.analysis.phase_panel import ACTION_TYPES, PHASES
+from ui.analysis.phase_panel import ACTION_TYPES, DEFENSE_LEVELS, PHASES
 from ui.analysis.turnover_dialog import TURNOVER_TYPES
 
 
 TURNOVER_CODES = {code for code, _ in TURNOVER_TYPES} | {"TURNOVER"}
+
+SHOT_TYPES = {"2PTS_MADE", "2PTS_MISSED", "3PTS_MADE", "3PTS_MISSED"}
 
 
 
@@ -288,6 +294,68 @@ class EditEventDialog(QDialog):
 
 
 
+        # -------------------------
+        # Détails de tir (défense, rebond off. préalable, dribbles)
+        # -------------------------
+
+        self.defense_combo = QComboBox(
+            self
+        )
+
+        self.defense_combo.addItem(
+            "",
+            None
+        )
+
+        for code, label in DEFENSE_LEVELS:
+
+            self.defense_combo.addItem(
+                label,
+                code
+            )
+
+        defense_index = self.defense_combo.findData(
+            event.defense_level
+        )
+
+        if defense_index >= 0:
+
+            self.defense_combo.setCurrentIndex(
+                defense_index
+            )
+
+
+        self.prior_oreb_checkbox = QCheckBox(
+            "Après un rebond offensif (même possession)",
+            self
+        )
+
+        self.prior_oreb_checkbox.setChecked(
+            bool(event.prior_oreb)
+        )
+
+
+        self.dribbles_spin = QSpinBox(
+            self
+        )
+
+        self.dribbles_spin.setRange(
+            0,
+            15
+        )
+
+        self.dribbles_spin.setValue(
+            event.dribbles or 0
+        )
+
+
+        self._sync_shot_details_from_event(
+            event.event_type
+        )
+
+
+
+
 
         # -------------------------
         # Boutons
@@ -361,6 +429,24 @@ class EditEventDialog(QDialog):
         form.addRow(
             "Type d'action :",
             self.action_type_combo
+        )
+
+
+        form.addRow(
+            "Défense (tir) :",
+            self.defense_combo
+        )
+
+
+        form.addRow(
+            "",
+            self.prior_oreb_checkbox
+        )
+
+
+        form.addRow(
+            "Dribbles avant le tir :",
+            self.dribbles_spin
         )
 
 
@@ -441,6 +527,32 @@ class EditEventDialog(QDialog):
             )
 
 
+    def _sync_shot_details_from_event(
+        self,
+        event_code: str
+    ) -> None:
+        """
+        Active les champs de détails de tir (défense, rebond offensif
+        préalable, dribbles) si l'événement courant est un tir ; les
+        désactive sinon (ils n'ont pas de sens pour un autre type
+        d'événement).
+        """
+
+        is_shot = event_code in SHOT_TYPES
+
+        self.defense_combo.setEnabled(
+            is_shot
+        )
+
+        self.prior_oreb_checkbox.setEnabled(
+            is_shot
+        )
+
+        self.dribbles_spin.setEnabled(
+            is_shot
+        )
+
+
 
     def _on_event_changed(
         self,
@@ -451,6 +563,10 @@ class EditEventDialog(QDialog):
 
 
         self._sync_turnover_from_event(
+            event_code
+        )
+
+        self._sync_shot_details_from_event(
             event_code
         )
 
@@ -505,7 +621,10 @@ class EditEventDialog(QDialog):
 
     def result_values(
         self
-    ) -> Tuple[int, str, int, str, Optional[str], Optional[str]]:
+    ) -> Tuple[
+        int, str, int, Optional[str], Optional[str], Optional[str],
+        Optional[str], Optional[bool], Optional[int]
+    ]:
         """
         Retourne :
         (
@@ -514,7 +633,10 @@ class EditEventDialog(QDialog):
             quarter,
             phase,
             system,
-            action_type
+            action_type,
+            defense_level,
+            prior_oreb,
+            dribbles
         )
         """
 
@@ -544,6 +666,30 @@ class EditEventDialog(QDialog):
             event_type = self.event_combo.currentData()
 
 
+        # Les détails de tir n'ont de sens que si l'événement final en est
+        # un : on les remet à None sinon, plutôt que de conserver une
+        # valeur résiduelle sans rapport avec le nouvel événement.
+        is_shot = event_type in SHOT_TYPES
+
+        defense_level = (
+            self.defense_combo.currentData()
+            if is_shot
+            else None
+        )
+
+        prior_oreb = (
+            self.prior_oreb_checkbox.isChecked()
+            if is_shot
+            else None
+        )
+
+        dribbles = (
+            self.dribbles_spin.value()
+            if is_shot
+            else None
+        )
+
+
         return (
 
             self.player_combo.currentData(),
@@ -559,5 +705,11 @@ class EditEventDialog(QDialog):
             system,
 
             action_type,
+
+            defense_level,
+
+            prior_oreb,
+
+            dribbles,
 
         )

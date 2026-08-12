@@ -127,6 +127,9 @@ class AnalysisController:
             action_type: Optional[str] = None,
             x: Optional[float] = None,
             y: Optional[float] = None,
+            defense_level: Optional[str] = None,
+            prior_oreb: Optional[bool] = None,
+            dribbles: Optional[int] = None,
         ) -> Event:
             """
             Ajoute un événement dans la base.
@@ -140,6 +143,11 @@ class AnalysisController:
 
             x et y sont utilisés pour les tirs afin de construire
             le shot chart.
+
+            defense_level, prior_oreb et dribbles sont des détails saisis
+            spécifiquement pour les tirs (voir ShotDetailsDialog) : niveau
+            de défense subi, tir consécutif à un rebond offensif dans la
+            même possession, nombre de dribbles pris avant le tir.
             """
 
             event_id = self.database.add_event(
@@ -153,6 +161,9 @@ class AnalysisController:
                 action_type=action_type,
                 x=x,
                 y=y,
+                defense_level=defense_level,
+                prior_oreb=prior_oreb,
+                dribbles=dribbles,
             )
 
             return Event(
@@ -167,6 +178,9 @@ class AnalysisController:
                 action_type=action_type,
                 x=x,
                 y=y,
+                defense_level=defense_level,
+                prior_oreb=prior_oreb,
+                dribbles=dribbles,
             )
 
     # =====================================================

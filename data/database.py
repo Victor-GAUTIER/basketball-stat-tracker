@@ -123,6 +123,24 @@ class Database:
             )
             self._connection.commit()
 
+        if "defense_level" not in existing_columns:
+            self._connection.execute(
+                "ALTER TABLE events ADD COLUMN defense_level TEXT"
+            )
+            self._connection.commit()
+
+        if "prior_oreb" not in existing_columns:
+            self._connection.execute(
+                "ALTER TABLE events ADD COLUMN prior_oreb INTEGER"
+            )
+            self._connection.commit()
+
+        if "dribbles" not in existing_columns:
+            self._connection.execute(
+                "ALTER TABLE events ADD COLUMN dribbles INTEGER"
+            )
+            self._connection.commit()
+
         cur = self._connection.execute("PRAGMA table_info(game_players)")
         existing_game_player_columns = {row["name"] for row in cur.fetchall()}
 
@@ -493,6 +511,9 @@ class Database:
         action_type: Optional[str] = None,
         x: Optional[float] = None,
         y: Optional[float] = None,
+        defense_level: Optional[str] = None,
+        prior_oreb: Optional[bool] = None,
+        dribbles: Optional[int] = None,
     ) -> int:
 
         cur = self.connection.execute(
@@ -507,9 +528,12 @@ class Database:
                 system,
                 action_type,
                 x,
-                y
+                y,
+                defense_level,
+                prior_oreb,
+                dribbles
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 game_id,
@@ -522,6 +546,9 @@ class Database:
                 action_type,
                 x,
                 y,
+                defense_level,
+                None if prior_oreb is None else int(prior_oreb),
+                dribbles,
             ),
         )
 
@@ -542,17 +569,33 @@ class Database:
         phase: Optional[str] = None,
         system: Optional[str] = None,
         action_type: Optional[str] = None,
+        defense_level: Optional[str] = None,
+        prior_oreb: Optional[bool] = None,
+        dribbles: Optional[int] = None,
     ) -> None:
-        """Corrige la joueuse, le type, le quart-temps, la phase, le système
-        et/ou le type d'action d'un événement.
+        """Corrige la joueuse, le type, le quart-temps, la phase, le système,
+        le type d'action et/ou les détails de tir (défense, rebond offensif
+        préalable, nombre de dribbles) d'un événement.
 
         Le timestamp n'est pas modifié : il reste lié
         au moment réel où l'action a été cliquée pendant l'analyse vidéo.
         """
         self.connection.execute(
             "UPDATE events SET player_id = ?, event_type = ?, quarter = ?, "
-            "phase = ?, system = ?, action_type = ? WHERE id = ?",
-            (player_id, event_type, quarter, phase, system, action_type, event_id),
+            "phase = ?, system = ?, action_type = ?, defense_level = ?, "
+            "prior_oreb = ?, dribbles = ? WHERE id = ?",
+            (
+                player_id,
+                event_type,
+                quarter,
+                phase,
+                system,
+                action_type,
+                defense_level,
+                None if prior_oreb is None else int(prior_oreb),
+                dribbles,
+                event_id,
+            ),
         )
         self.connection.commit()
 
@@ -570,7 +613,7 @@ class Database:
     def get_events_for_game(self, game_id: int) -> List[Event]:
         cur = self.connection.execute(
             "SELECT id, game_id, player_id, timestamp, quarter, event_type, "
-            "phase, system, action_type, x, y "
+            "phase, system, action_type, x, y, defense_level, prior_oreb, dribbles "
             "FROM events WHERE game_id = ? ORDER BY timestamp",
             (game_id,),
         )
@@ -587,6 +630,9 @@ class Database:
                 action_type=r["action_type"],
                 x=r["x"],
                 y=r["y"],
+                defense_level=r["defense_level"],
+                prior_oreb=None if r["prior_oreb"] is None else bool(r["prior_oreb"]),
+                dribbles=r["dribbles"],
             )
             for r in cur.fetchall()
         ]
@@ -594,7 +640,7 @@ class Database:
     def get_last_event_for_game(self, game_id: int) -> Optional[Event]:
         cur = self.connection.execute(
             "SELECT id, game_id, player_id, timestamp, quarter, event_type, "
-            "phase, system, action_type, x, y "
+            "phase, system, action_type, x, y, defense_level, prior_oreb, dribbles "
             "FROM events WHERE game_id = ? ORDER BY id DESC LIMIT 1",
             (game_id,),
         )
@@ -613,6 +659,9 @@ class Database:
             action_type=r["action_type"],
             x=r["x"],
             y=r["y"],
+            defense_level=r["defense_level"],
+            prior_oreb=None if r["prior_oreb"] is None else bool(r["prior_oreb"]),
+            dribbles=r["dribbles"],
         )
 
     def delete_game(self, game_id: int) -> None:

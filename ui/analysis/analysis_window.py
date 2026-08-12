@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import List
 
-from PySide6.QtCore import Qt, QTimer, QThread
+from PySide6.QtCore import Qt, QTimer, QThread, QEvent
 from PySide6.QtGui import QKeySequence, QShortcut, QAction
 from PySide6.QtWidgets import (
     QFileDialog,
@@ -41,6 +41,7 @@ from ui.analysis.shot_map_widget import ShotChartSummaryPanel
 from ui.analysis.phase_panel import PhasePanel
 from ui.analysis.team_comparison_panel import TeamComparisonPanel
 from ui.analysis.turnover_dialog import TurnoverTypeDialog
+from ui.analysis.shot_details_dialog import ShotDetailsDialog
 
 from dataclasses import replace
 
@@ -117,18 +118,66 @@ class AnalysisWindow(QMainWindow):
 
         self._load_game_data()
 
-        for i in range(self.tabs.count()):
-            widget = self.tabs.widget(i)
-            print(
-                self.tabs.tabText(i),
-                "minimumSizeHint:", widget.minimumSizeHint().width(),
-                "sizeHint:", widget.sizeHint().width(),
-            )
 
         self.setStatusBar(
             QStatusBar(self)
         )
 
+
+    # =====================================================
+    # Correctif plein écran natif macOS
+    # =====================================================
+
+    def changeEvent(self, event):
+        """
+        Bug connu de Qt sur macOS : lorsqu'une fenêtre contient un widget
+        vidéo (QVideoWidget), le passage en plein écran natif (bouton vert)
+        ne redéclenche pas toujours un vrai resizeEvent sur tout le
+        contenu. La fenêtre reste alors figée à son ancienne géométrie et
+        coupe (ou casse) la partie droite de l'interface.
+
+        On détecte le changement d'état de la fenêtre et on force Qt à
+        relayouter en "secouant" légèrement sa taille juste après.
+        """
+
+        super().changeEvent(event)
+
+        if event.type() == QEvent.Type.WindowStateChange:
+
+            # Le passage en plein écran natif est animé par macOS
+            # (~0,3-0,5s). Si on force le relayout trop tôt, on capture une
+            # géométrie transitoire et ça casse l'affichage (colonne de
+            # droite qui passe sous la colonne de gauche). On attend donc
+            # la fin de l'animation avant de "secouer" la fenêtre.
+            QTimer.singleShot(
+                400,
+                self._force_relayout
+            )
+
+        elif event.type() == QEvent.Type.ActivationChange:
+
+            # Revenir sur la fenêtre depuis une autre application peut
+            # réafficher l'état figé précédent : on rejoue le même
+            # correctif (pas d'animation ici, donc pas besoin d'attendre).
+            QTimer.singleShot(
+                0,
+                self._force_relayout
+            )
+
+    def _force_relayout(self):
+
+        size = self.size()
+
+        # Un redimensionnement (même d'un seul pixel) force Qt à
+        # recalculer et réappliquer tous les layouts de la fenêtre.
+        self.resize(
+            size.width() + 1,
+            size.height()
+        )
+
+        self.resize(
+            size
+        )
 
 
     # =====================================================
@@ -1079,8 +1128,10 @@ class AnalysisWindow(QMainWindow):
 
             (
                 "M",
-                self._on_toggle_mute
+                self.video_panel.toggle_mute
             ),
+
+
 
             *[
                 (
@@ -1121,13 +1172,7 @@ class AnalysisWindow(QMainWindow):
                 shortcut
             )
 
-    def _on_toggle_mute(self):
 
-            """
-            Coupe / réactive le son de la vidéo, avec un petit retour visuel.
-            """
-
-            self.video_panel.toggle_mute()
 
     # =====================================================
     # Popup temporaire (toast)
@@ -1467,7 +1512,6 @@ class AnalysisWindow(QMainWindow):
 
         phase = self.phase_panel.current_phase()
         system = self.phase_panel.current_system()
-        action_type = self.phase_panel.current_action_type()
 
         self.controller.record_event(
             player_id,
@@ -1475,7 +1519,6 @@ class AnalysisWindow(QMainWindow):
             event_code,
             phase=phase,
             system=system,
-            action_type=action_type,
         )
 
 
@@ -1628,9 +1671,28 @@ class AnalysisWindow(QMainWindow):
 
 
 
+        # -------------------------
+        # Détails du tir (type d'action, défense, rebond off. préalable,
+        # dribbles) : popup dédié, qui remplace l'ancienne ligne de
+        # boutons "Type d'action" de PhasePanel. Annuler le popup annule
+        # l'enregistrement du tir (même logique que TurnoverTypeDialog).
+        # -------------------------
+
+        details_dialog = ShotDetailsDialog(self)
+
+        if details_dialog.exec() != ShotDetailsDialog.DialogCode.Accepted:
+
+            return
+
+
+        action_type = details_dialog.selected_action_type()
+        defense_level = details_dialog.selected_defense_level()
+        prior_oreb = details_dialog.prior_oreb()
+        dribbles = details_dialog.dribbles_count()
+
+
         phase = self.phase_panel.current_phase()
         system = self.phase_panel.current_system()
-        action_type = self.phase_panel.current_action_type()
 
         self.controller.record_event(
             player_id,
@@ -1640,7 +1702,10 @@ class AnalysisWindow(QMainWindow):
             system=system,
             action_type=action_type,
             x=x,
-            y=y
+            y=y,
+            defense_level=defense_level,
+            prior_oreb=prior_oreb,
+            dribbles=dribbles,
         )
 
 
@@ -1750,7 +1815,17 @@ class AnalysisWindow(QMainWindow):
 
             return
 
-        player_id, event_type, quarter, phase, system, action_type = dialog.result_values()
+        (
+            player_id,
+            event_type,
+            quarter,
+            phase,
+            system,
+            action_type,
+            defense_level,
+            prior_oreb,
+            dribbles,
+        ) = dialog.result_values()
 
         if player_id is None or event_type is None:
 
@@ -1764,6 +1839,9 @@ class AnalysisWindow(QMainWindow):
             phase,
             system,
             action_type,
+            defense_level,
+            prior_oreb,
+            dribbles,
         )
 
         self._refresh_data()

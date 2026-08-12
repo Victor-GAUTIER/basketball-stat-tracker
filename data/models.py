@@ -55,3 +55,13 @@ class Event:
     action_type: Optional[str] = None
     x: Optional[float] = None
     y: Optional[float] = None
+
+    # Détails saisis spécifiquement pour les tirs (voir
+    # ui.analysis.shot_details_dialog.ShotDetailsDialog) : niveau de
+    # défense subi, tir consécutif à un rebond offensif dans la même
+    # possession, nombre de dribbles pris avant le tir. None = non
+    # renseigné (événement antérieur à l'ajout de ces champs, ou
+    # événement qui n'est pas un tir).
+    defense_level: Optional[str] = None
+    prior_oreb: Optional[bool] = None
+    dribbles: Optional[int] = None

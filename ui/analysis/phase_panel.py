@@ -34,6 +34,11 @@ PHASES = {
 }
 
 
+# Conservé ici comme source de vérité unique (utilisé par
+# ShotDetailsDialog et EditEventDialog), même si PhasePanel n'affiche plus
+# lui-même de boutons "Type d'action" : cette info est désormais saisie au
+# moment du tir, via le popup ShotDetailsDialog (voir
+# AnalysisWindow._on_shot_clicked).
 ACTION_TYPES = [
     "Jeu rapide",
     "PnR",
@@ -43,6 +48,14 @@ ACTION_TYPES = [
     "Reb off",
     "Écran non porteur",
     "Mouvement de balle",
+]
+
+
+# Niveau de défense subi sur un tir, saisi via ShotDetailsDialog.
+DEFENSE_LEVELS = [
+    ("OUVERT", "Ouvert"),
+    ("PEU_DEFENDU", "Un peu défendu"),
+    ("TRES_DEFENDU", "Très défendu"),
 ]
 
 
@@ -65,7 +78,6 @@ QPushButton:checked {
 class PhasePanel(QWidget):
 
     phase_changed = Signal(str, str)
-    action_type_changed = Signal(str)
 
     def __init__(self, parent=None):
 
@@ -76,7 +88,6 @@ class PhasePanel(QWidget):
 
         self._current_phase = None
         self._current_system = None
-        self._current_action_type = None
 
         self._system_buttons = {}
 
@@ -124,31 +135,6 @@ class PhasePanel(QWidget):
         self.system_row.addStretch()
 
         main_layout.addLayout(self.system_row)
-
-        # -------------------------
-        # Ligne Type d'action
-        # -------------------------
-
-        self.action_row = QHBoxLayout()
-        self.action_row.addWidget(QLabel("Type d'action"))
-
-        self._action_buttons = {}
-
-        for action in ACTION_TYPES:
-
-            btn = self._make_button(action)
-
-            btn.clicked.connect(
-                lambda checked=False, a=action: self._on_action_clicked(a)
-            )
-
-            self._action_buttons[action] = btn
-
-            self.action_row.addWidget(btn)
-
-        self.action_row.addStretch()
-
-        main_layout.addLayout(self.action_row)
 
         # Sélection initiale : première phase de la liste
         first_phase = next(iter(PHASES))
@@ -236,28 +222,6 @@ class PhasePanel(QWidget):
         self.emit_change()
 
     # =====================================================
-    # Type d'action
-    # =====================================================
-
-    def _on_action_clicked(self, action):
-
-        if self._current_action_type == action:
-
-            self._current_action_type = None
-
-            self._action_buttons[action].setChecked(False)
-
-        else:
-
-            for a, btn in self._action_buttons.items():
-
-                btn.setChecked(a == action)
-
-            self._current_action_type = action
-
-        self.action_type_changed.emit(self._current_action_type or "")
-
-    # =====================================================
     # Accès externe
     # =====================================================
 
@@ -275,7 +239,3 @@ class PhasePanel(QWidget):
     def current_system(self):
 
         return self._current_system
-
-    def current_action_type(self):
-
-        return self._current_action_type

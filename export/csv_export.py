@@ -24,7 +24,11 @@ def export_events_to_csv(path: str, events: List[Event], players_by_id: Dict[int
     with open(path, "w", newline="", encoding="utf-8") as csv_file:
         writer = csv.writer(csv_file)
         writer.writerow(
-            ["timestamp_s", "quarter", "player_number", "player_name", "event_type", "x", "y"]
+            [
+                "timestamp_s", "quarter", "player_number", "player_name",
+                "event_type", "x", "y", "phase", "system", "action_type",
+                "defense_level", "prior_oreb", "dribbles",
+            ]
         )
         for event in events:
             player = players_by_id.get(event.player_id)
@@ -37,5 +41,11 @@ def export_events_to_csv(path: str, events: List[Event], players_by_id: Dict[int
                     event.event_type,
                     event.x if event.x is not None else "",
                     event.y if event.y is not None else "",
+                    event.phase or "",
+                    event.system or "",
+                    event.action_type or "",
+                    event.defense_level or "",
+                    "" if event.prior_oreb is None else int(event.prior_oreb),
+                    event.dribbles if event.dribbles is not None else "",
                 ]
             )
