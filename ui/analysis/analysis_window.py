@@ -47,6 +47,17 @@ from ui.analysis.shot_details_dialog import ShotDetailsDialog
 from dataclasses import replace
 
 
+# Touches de la rangée de chiffres du clavier AZERTY (Mac), utilisées sans
+# modificateur pour sélectionner rapidement une joueuse (voir
+# player_panel.select_player_by_index) : symboles produits sans Shift,
+# dans l'ordre des positions physiques 1 à 12. Si l'une d'entre elles ne
+# se déclenche pas correctement sur ton clavier (variations possibles
+# selon la disposition exacte / version de Qt), imprime `event.text()`
+# dans un keyPressEvent temporaire pour identifier le bon caractère et
+# ajuste la liste ci-dessous.
+PLAYER_SELECT_KEYS = ["&", "é", '"', "'", "(", "§", "è", "!", "ç", "à", ")", "-"]
+
+
 
 class AnalysisWindow(QMainWindow):
 
@@ -89,6 +100,10 @@ class AnalysisWindow(QMainWindow):
         self.home_attacks_right = True
 
         self._shortcuts = []
+
+        # Équipe actuellement "active" pour la sélection rapide de joueuse
+        # au clavier (touche @ pour basculer, voir _register_shortcuts).
+        self._shortcut_team_is_home = True
 
 
         # Référence vers le popup temporaire actuellement affiché
@@ -1238,6 +1253,23 @@ class AnalysisWindow(QMainWindow):
             ),
 
 
+            (
+                "@",
+                self._on_toggle_shortcut_team
+            ),
+
+
+            *[
+                (
+                    key,
+                    lambda i=index:
+                    self._on_select_player_shortcut(i)
+                )
+
+                for index, key
+                in enumerate(PLAYER_SELECT_KEYS)
+            ],
+
 
             *[
                 (
@@ -1277,6 +1309,49 @@ class AnalysisWindow(QMainWindow):
             self._shortcuts.append(
                 shortcut
             )
+
+
+
+    # =====================================================
+    # Raccourcis de sélection rapide de joueuse
+    # =====================================================
+
+    def _on_toggle_shortcut_team(self):
+        """
+        Bascule l'équipe "active" pour la sélection rapide de joueuse au
+        clavier (touche @). Un petit toast confirme l'équipe désormais
+        active, puisqu'il n'y a pas d'autre indicateur visuel pour ce mode.
+        """
+
+        self._shortcut_team_is_home = not self._shortcut_team_is_home
+
+        if self._shortcut_team_is_home:
+
+            team_name = (
+                self.home_team.name
+                if self.home_team
+                else "Domicile"
+            )
+
+        else:
+
+            team_name = (
+                self.away_team.name
+                if self.away_team
+                else "Extérieur"
+            )
+
+        self._show_toast(
+            f"Sélection de joueuse : {team_name}",
+            duration_ms=1200
+        )
+
+    def _on_select_player_shortcut(self, index: int):
+
+        self.player_panel.select_player_by_index(
+            self._shortcut_team_is_home,
+            index
+        )
 
 
 
@@ -1616,6 +1691,29 @@ class AnalysisWindow(QMainWindow):
 
                 return
 
+        # Lancers francs : même popup que pour un tir de jeu, mais réduit
+        # au type d'action et au rebond offensif préalable (la défense et
+        # les dribbles n'ont pas de sens pour un lancer franc). Annuler le
+        # popup annule tout l'événement, comme pour une perte de balle.
+        action_type = None
+        prior_oreb = None
+
+        if event_code in ("FT_MADE", "FT_MISSED"):
+
+            details_dialog = ShotDetailsDialog(
+                self,
+                show_defense=False,
+                show_dribbles=False,
+                title="Détails du lancer franc",
+            )
+
+            if details_dialog.exec() != ShotDetailsDialog.DialogCode.Accepted:
+
+                return
+
+            action_type = details_dialog.selected_action_type()
+            prior_oreb = details_dialog.prior_oreb()
+
         phase = self.phase_panel.current_phase()
         system = self.phase_panel.current_system()
 
@@ -1625,6 +1723,8 @@ class AnalysisWindow(QMainWindow):
             event_code,
             phase=phase,
             system=system,
+            action_type=action_type,
+            prior_oreb=prior_oreb,
         )
 
 

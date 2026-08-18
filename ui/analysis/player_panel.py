@@ -163,6 +163,26 @@ class PlayerPanel(QWidget):
         self._selected_player_id = player_id
         self.player_selected.emit(player_id)
 
+    def select_player_by_index(self, is_home: bool, index: int) -> None:
+        """Sélectionne la joueuse à la position `index` (0-based, dans
+        l'ordre d'affichage de la liste, donc par numéro de maillot
+        croissant) de l'équipe domicile ou extérieure.
+
+        Utilisé par les raccourcis clavier de sélection rapide (touche `@`
+        pour changer d'équipe active, puis une touche de la rangée de
+        chiffres pour choisir la joueuse). Ne fait rien si l'index dépasse
+        le nombre de joueuses de cette équipe.
+        """
+        target_list = self.home_list if is_home else self.away_list
+        other_list = self.away_list if is_home else self.home_list
+
+        if index < 0 or index >= target_list.count():
+            return
+
+        other_list.clearSelection()
+        target_list.setCurrentRow(index)
+        self._select(target_list.item(index))
+
     def selected_player_id(self) -> Optional[int]:
         return self._selected_player_id
 

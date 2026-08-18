@@ -1,14 +1,18 @@
 """Popup affiché après l'enregistrement d'un tir (clic sur le terrain de
-tir), pour préciser :
+tir) ou d'un lancer franc, pour préciser :
 - le type d'action ayant amené le tir (remplace l'ancienne ligne de
   boutons "Type d'action" de PhasePanel, qui ne concernait de toute façon
   quasiment que les tirs) ;
-- le niveau de défense subi ;
+- le niveau de défense subi (tirs de jeu uniquement) ;
 - si le tir suit un rebond offensif dans la même possession (indépendant
   du type d'action : un tir peut suivre un rebond offensif ET plusieurs
   passes, auquel cas le type d'action sera par exemple "Mouvement de
   balle" tout en ayant cette case cochée) ;
-- le nombre de dribbles pris juste avant le tir.
+- le nombre de dribbles pris juste avant le tir (tirs de jeu uniquement :
+  n'a pas de sens pour un lancer franc).
+
+Pour les lancers francs, `show_defense=False, show_dribbles=False` réduit
+le popup au type d'action et au rebond offensif préalable uniquement.
 
 Contrairement aux raccourcis utilisés pendant la saisie en direct, ce
 popup n'a pas besoin d'être ultra-rapide : il apparaît une fois le tir
@@ -41,12 +45,21 @@ class ShotDetailsDialog(QDialog):
     sélection = non renseigné), seul le nombre de dribbles a une valeur
     par défaut (0)."""
 
-    def __init__(self, parent: Optional[QWidget] = None) -> None:
+    def __init__(
+        self,
+        parent: Optional[QWidget] = None,
+        show_defense: bool = True,
+        show_dribbles: bool = True,
+        title: str = "Détails du tir",
+    ) -> None:
 
         super().__init__(parent)
 
-        self.setWindowTitle("Détails du tir")
+        self.setWindowTitle(title)
         self.setMinimumWidth(420)
+
+        self._show_defense = show_defense
+        self._show_dribbles = show_dribbles
 
         self._current_action_type: Optional[str] = None
         self._current_defense_level: Optional[str] = None
@@ -81,28 +94,30 @@ class ShotDetailsDialog(QDialog):
         layout.addLayout(action_row)
 
         # -------------------------
-        # Défense
+        # Défense (tirs de jeu uniquement)
         # -------------------------
 
-        layout.addWidget(QLabel("Défense"))
+        if self._show_defense:
 
-        defense_row = QHBoxLayout()
+            layout.addWidget(QLabel("Défense"))
 
-        for code, label in DEFENSE_LEVELS:
+            defense_row = QHBoxLayout()
 
-            btn = self._make_button(label)
+            for code, label in DEFENSE_LEVELS:
 
-            btn.clicked.connect(
-                lambda checked=False, c=code: self._on_defense_clicked(c)
-            )
+                btn = self._make_button(label)
 
-            self._defense_buttons[code] = btn
+                btn.clicked.connect(
+                    lambda checked=False, c=code: self._on_defense_clicked(c)
+                )
 
-            defense_row.addWidget(btn)
+                self._defense_buttons[code] = btn
 
-        defense_row.addStretch()
+                defense_row.addWidget(btn)
 
-        layout.addLayout(defense_row)
+            defense_row.addStretch()
+
+            layout.addLayout(defense_row)
 
         # -------------------------
         # Rebond offensif préalable
@@ -115,20 +130,24 @@ class ShotDetailsDialog(QDialog):
         layout.addWidget(self.prior_oreb_checkbox)
 
         # -------------------------
-        # Nombre de dribbles préalables
+        # Nombre de dribbles préalables (tirs de jeu uniquement)
         # -------------------------
 
-        dribbles_row = QHBoxLayout()
+        self.dribbles_spin: Optional[QSpinBox] = None
 
-        dribbles_row.addWidget(QLabel("Dribbles avant le tir"))
+        if self._show_dribbles:
 
-        self.dribbles_spin = QSpinBox(self)
-        self.dribbles_spin.setRange(0, 15)
+            dribbles_row = QHBoxLayout()
 
-        dribbles_row.addWidget(self.dribbles_spin)
-        dribbles_row.addStretch()
+            dribbles_row.addWidget(QLabel("Dribbles avant le tir"))
 
-        layout.addLayout(dribbles_row)
+            self.dribbles_spin = QSpinBox(self)
+            self.dribbles_spin.setRange(0, 15)
+
+            dribbles_row.addWidget(self.dribbles_spin)
+            dribbles_row.addStretch()
+
+            layout.addLayout(dribbles_row)
 
         # -------------------------
         # Boutons
@@ -201,5 +220,7 @@ class ShotDetailsDialog(QDialog):
     def prior_oreb(self) -> bool:
         return self.prior_oreb_checkbox.isChecked()
 
-    def dribbles_count(self) -> int:
+    def dribbles_count(self) -> Optional[int]:
+        if self.dribbles_spin is None:
+            return None
         return self.dribbles_spin.value()
