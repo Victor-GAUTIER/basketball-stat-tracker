@@ -638,3 +638,77 @@ def win_pct_by_shooting_comparison(
         return wins / len(subset) * 100
 
     return _win_pct(better), _win_pct(worse), len(better), len(worse)
+
+
+# Codes de perte de balle : types détaillés + ancien code générique
+# "TURNOVER" conservé pour les événements enregistrés avant l'ajout du
+# choix du type de perte de balle.
+_TURNOVER_CODES = (
+    "TO_PASS", "TO_DRIBBLE", "TO_VIOLATION", "TO_SORTIE",
+    "TO_FAUTE", "TO_TEMPS", "TO_AUTRE", "TURNOVER",
+)
+
+
+def compute_player_averages(
+    database: Database,
+    players: List[Player],
+) -> Dict[int, Dict[str, float]]:
+    """Calcule, pour chaque joueur de la liste, ses statistiques moyennes
+    PAR MATCH sur l'ensemble des matchs auxquels il a participé (toute la
+    saison), utilisé par l'onglet "Boxscore" du tableau de bord d'équipe.
+
+    Retourne {player_id: {"GP": ..., "PTS": ..., "REB": ..., ...}}. Un
+    joueur sans aucun match joué a un dictionnaire vide.
+    """
+
+    averages: Dict[int, Dict[str, float]] = {}
+
+    for player in players:
+
+        games_played = database.get_games_played_count(player.id)
+
+        if games_played == 0:
+            averages[player.id] = {}
+            continue
+
+        totals: Dict[str, int] = defaultdict(int)
+
+        for event in database.get_events_for_player(player.id):
+            totals[event.event_type] += 1
+
+        two_made = totals.get("2PTS_MADE", 0)
+        two_att = two_made + totals.get("2PTS_MISSED", 0)
+
+        three_made = totals.get("3PTS_MADE", 0)
+        three_att = three_made + totals.get("3PTS_MISSED", 0)
+
+        ft_made = totals.get("FT_MADE", 0)
+        ft_att = ft_made + totals.get("FT_MISSED", 0)
+
+        fg_made = two_made + three_made
+        fg_att = two_att + three_att
+
+        pts = two_made * 2 + three_made * 3 + ft_made
+        reb = totals.get("OFF_REBOUND", 0) + totals.get("DEF_REBOUND", 0)
+        ast = totals.get("ASSIST", 0)
+        stl = totals.get("STEAL", 0)
+        blk = totals.get("BLOCK", 0)
+        pf = totals.get("FOUL", 0)
+
+        tov = sum(totals.get(code, 0) for code in _TURNOVER_CODES)
+
+        averages[player.id] = {
+            "GP": games_played,
+            "PTS": pts / games_played,
+            "REB": reb / games_played,
+            "AST": ast / games_played,
+            "STL": stl / games_played,
+            "BLK": blk / games_played,
+            "TOV": tov / games_played,
+            "PF": pf / games_played,
+            "FG_PCT": (fg_made / fg_att * 100) if fg_att else 0.0,
+            "3PT_PCT": (three_made / three_att * 100) if three_att else 0.0,
+            "FT_PCT": (ft_made / ft_att * 100) if ft_att else 0.0,
+        }
+
+    return averages

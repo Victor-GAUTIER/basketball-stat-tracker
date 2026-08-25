@@ -610,6 +610,44 @@ class Database:
         )
         self.connection.commit()
 
+    def get_events_for_player(self, player_id: int) -> List[Event]:
+        """Retourne tous les événements d'un joueur, tous matchs confondus
+        (utilisé pour calculer des moyennes saison)."""
+        cur = self.connection.execute(
+            "SELECT id, game_id, player_id, timestamp, quarter, event_type, "
+            "phase, system, action_type, x, y, defense_level, prior_oreb, dribbles "
+            "FROM events WHERE player_id = ? ORDER BY game_id, timestamp",
+            (player_id,),
+        )
+        return [
+            Event(
+                id=r["id"],
+                game_id=r["game_id"],
+                player_id=r["player_id"],
+                timestamp=r["timestamp"],
+                quarter=r["quarter"],
+                event_type=r["event_type"],
+                phase=r["phase"],
+                system=r["system"],
+                action_type=r["action_type"],
+                x=r["x"],
+                y=r["y"],
+                defense_level=r["defense_level"],
+                prior_oreb=None if r["prior_oreb"] is None else bool(r["prior_oreb"]),
+                dribbles=r["dribbles"],
+            )
+            for r in cur.fetchall()
+        ]
+
+    def get_games_played_count(self, player_id: int) -> int:
+        """Nombre de matchs auxquels ce joueur est associé (game_players)."""
+        cur = self.connection.execute(
+            "SELECT COUNT(*) AS n FROM game_players WHERE player_id = ?",
+            (player_id,),
+        )
+        row = cur.fetchone()
+        return int(row["n"]) if row else 0
+
     def get_events_for_game(self, game_id: int) -> List[Event]:
         cur = self.connection.execute(
             "SELECT id, game_id, player_id, timestamp, quarter, event_type, "

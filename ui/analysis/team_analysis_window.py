@@ -34,12 +34,14 @@ from controller.team_analysis_controller import (
     aggregate_player_box,
     aggregate_points_by_action,
     aggregate_turnover_breakdown,
+    compute_player_averages,
     compute_team_dashboard,
     win_pct_by_shooting_comparison,
 )
 
 from data.database import Database
 
+from ui.analysis.boxscore_panel import BoxscorePanel
 from ui.analysis.filters import MultiSelectFilter
 from ui.analysis.shot_map_widget import ShotChartSummaryPanel
 
@@ -787,6 +789,12 @@ class TeamAnalysisWindow(QMainWindow):
 
 
         tabs.addTab(
+            self._build_boxscore_tab(),
+            "Boxscore"
+        )
+
+
+        tabs.addTab(
             self._build_shot_chart_tab(),
             "Shot chart"
         )
@@ -1299,6 +1307,35 @@ class TeamAnalysisWindow(QMainWindow):
         layout.addWidget(
             _make_canvas(fig2)
         )
+
+
+
+    # =====================================================
+    # Onglet Boxscore
+    # =====================================================
+
+    def _build_boxscore_tab(self) -> QWidget:
+
+        dash = self.dashboard
+
+        panel = BoxscorePanel()
+
+        if not dash.players:
+
+            return panel
+
+        averages = compute_player_averages(
+            self.database,
+            dash.players
+        )
+
+        panel.refresh(
+            sorted(dash.players, key=lambda p: p.number),
+            averages,
+            dash.team_name
+        )
+
+        return panel
 
 
 
