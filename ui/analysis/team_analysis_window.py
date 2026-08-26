@@ -51,6 +51,7 @@ from data.database import Database
 from ui.analysis.boxscore_panel import BoxscorePanel
 from ui.analysis.filters import MultiSelectFilter
 from ui.analysis.shot_map_widget import ShotChartSummaryPanel
+from ui.utils import resource_path
 
 
 
@@ -1540,7 +1541,7 @@ class TeamAnalysisWindow(QMainWindow):
 
 
         panel = ShotChartSummaryPanel(
-            "assets/court.svg"
+            resource_path("assets/court.svg")
         )
 
 

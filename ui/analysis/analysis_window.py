@@ -43,6 +43,7 @@ from ui.analysis.phase_panel import PhasePanel
 from ui.analysis.team_comparison_panel import TeamComparisonPanel
 from ui.analysis.turnover_dialog import TurnoverTypeDialog
 from ui.analysis.shot_details_dialog import ShotDetailsDialog
+from ui.utils import resource_path
 
 from dataclasses import replace
 
@@ -432,7 +433,7 @@ class AnalysisWindow(QMainWindow):
         # Terrain de tirs
 
         self.shot_chart = ShotChartWidget(
-            "assets/court.svg",
+            resource_path("assets/court.svg"),
             self
         )
 
@@ -599,7 +600,7 @@ class AnalysisWindow(QMainWindow):
         # =========================
 
         self.shot_chart_summary_panel = ShotChartSummaryPanel(
-            "assets/court.svg",
+            resource_path("assets/court.svg"),
             self
         )
 
