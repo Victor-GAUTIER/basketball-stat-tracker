@@ -2198,6 +2198,9 @@ class AnalysisWindow(QMainWindow):
         self._export_progress_dialog.canceled.connect(
             self._export_worker.cancel
         )
+        self._export_progress_dialog.canceled.connect(
+            self._export_progress_dialog.close
+        )
 
         self._export_worker.finished.connect(self._export_thread.quit)
         self._export_worker.error.connect(self._export_thread.quit)

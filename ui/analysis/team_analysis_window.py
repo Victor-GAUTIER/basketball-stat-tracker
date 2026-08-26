@@ -12,16 +12,23 @@ os.environ.setdefault("QT_API", "pyside6")
 
 from typing import Dict, List, Optional, Tuple
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QThread
 from PySide6.QtWidgets import (
+    QFileDialog,
     QHBoxLayout,
     QLabel,
     QMainWindow,
+    QMessageBox,
+    QProgressDialog,
     QScrollArea,
     QTabWidget,
     QVBoxLayout,
     QWidget,
 )
+
+from data.models import Player
+from export.video_export import VideoExportWorker
+from ui.analysis.team_play_by_play_panel import TeamPlayByPlayEvent, TeamPlayByPlayPanel
 
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
@@ -675,6 +682,8 @@ class TeamAnalysisWindow(QMainWindow):
         self.database = database
 
         self.launch_window = launch_window
+        self._analysis_windows: Dict[int, "AnalysisWindow"] = {}
+        self._playbyplay_video_paths: Dict[int, str] = {}
 
 
         self.dashboard: TeamDashboard = (
@@ -815,6 +824,11 @@ class TeamAnalysisWindow(QMainWindow):
         tabs.addTab(
             self._build_fouls_tab(),
             "Fautes & lancers francs"
+        )
+
+        tabs.addTab(
+            self._build_playbyplay_tab(),
+            "Play by play"
         )
 
 
@@ -2114,8 +2128,152 @@ class TeamAnalysisWindow(QMainWindow):
 
         return scroll
 
-
-
     # =====================================================
-    # Fin
+    # Onglet Play by play (montages vidéo multi-matchs)
     # =====================================================
+
+    def _build_playbyplay_tab(self) -> QWidget:
+
+        panel = TeamPlayByPlayPanel()
+        self.team_playbyplay_panel = panel
+
+        dash = self.dashboard
+
+        if not dash.games:
+            return panel
+
+        self._load_playbyplay_data(panel)
+
+        panel.event_seek_requested.connect(self._on_team_seek_requested)
+        panel.export_requested.connect(self._on_team_export_requested)
+
+        return panel
+
+    def _load_playbyplay_data(self, panel: TeamPlayByPlayPanel) -> None:
+
+        dash = self.dashboard
+
+        items: List[TeamPlayByPlayEvent] = []
+        players: Dict[int, Player] = {p.id: p for p in dash.players}
+        team_player_ids = {p.id for p in dash.players}
+        games_for_filter: List[Tuple[int, str]] = []
+
+        player_cache: Dict[int, Optional[Player]] = {}
+
+        def get_player(player_id: int) -> Optional[Player]:
+            if player_id not in player_cache:
+                player_cache[player_id] = self.database.get_player(player_id)
+            return player_cache[player_id]
+
+        for game_dash in dash.games:
+
+            game = game_dash.game
+            label = f"vs {game_dash.opponent_name} ({game.date})"
+            games_for_filter.append((game.id, label))
+
+            for event in self.database.get_events_for_game(game.id):
+
+                if event.player_id not in players:
+                    player = get_player(event.player_id)
+                    if player is not None:
+                        players[player.id] = player
+
+                items.append(TeamPlayByPlayEvent(event, game.id, label))
+
+        self._playbyplay_video_paths = {
+            g.game.id: g.game.video_path for g in dash.games
+        }
+
+        panel.refresh(items, players, team_player_ids, games_for_filter)
+
+    def _on_team_seek_requested(self, game_id: int, timestamp: float) -> None:
+        """Ouvre (ou réactive) la fenêtre d'analyse du match concerné et
+        rembobine juste avant l'action, comme le double-clic dans le
+        play-by-play d'un match (voir AnalysisWindow._on_seek_from_playbyplay)."""
+
+        from ui.analysis.analysis_window import AnalysisWindow
+
+        window = self._analysis_windows.get(game_id)
+
+        if window is None or not window.isVisible():
+            window = AnalysisWindow(
+                self.database, game_id, launch_window=self.launch_window
+            )
+            self._analysis_windows[game_id] = window
+
+        window.show()
+        window.raise_()
+        window.activateWindow()
+
+        target = max(0.0, timestamp - 5.0)
+        window.video_panel.seek(target)
+        window.tabs.setCurrentIndex(0)
+
+    def _on_team_export_requested(self, events, before, after) -> None:
+
+        if not events:
+            return
+
+        video_paths = {
+            game_id: path
+            for game_id, path in self._playbyplay_video_paths.items()
+            if path
+        }
+
+        usable_events = [e for e in events if video_paths.get(e.game_id)]
+
+        if len(usable_events) < len(events):
+            QMessageBox.warning(
+                self,
+                "Vidéo introuvable",
+                "Certains événements sélectionnés n'ont pas de vidéo associée "
+                "à leur match et seront ignorés du montage."
+            )
+
+        if not usable_events:
+            return
+
+        output_path, _ = QFileDialog.getSaveFileName(
+            self, "Exporter le montage vidéo", "montage.mp4", "Vidéo MP4 (*.mp4)"
+        )
+
+        if not output_path:
+            return
+
+        self._export_thread = QThread(self)
+        self._export_worker = VideoExportWorker(
+            video_path=video_paths,
+            events=usable_events,
+            before=before,
+            after=after,
+            output_path=output_path,
+        )
+        self._export_worker.moveToThread(self._export_thread)
+
+        self._export_progress_dialog = QProgressDialog(
+            "Export du montage en cours...", "Annuler", 0, len(usable_events), self
+        )
+        self._export_progress_dialog.setWindowModality(Qt.WindowModal)
+
+        self._export_thread.started.connect(self._export_worker.run)
+        self._export_worker.progress.connect(
+            self._on_team_export_progress, Qt.ConnectionType.QueuedConnection
+        )
+        self._export_worker.finished.connect(self._on_team_export_finished)
+        self._export_worker.error.connect(self._on_team_export_error)
+        self._export_progress_dialog.canceled.connect(self._export_worker.cancel)
+        self._export_worker.finished.connect(self._export_thread.quit)
+        self._export_worker.error.connect(self._export_thread.quit)
+
+        self._export_thread.start()
+
+    def _on_team_export_progress(self, done, total) -> None:
+        self._export_progress_dialog.setValue(done)
+
+    def _on_team_export_finished(self, output_path) -> None:
+        self._export_progress_dialog.close()
+        QMessageBox.information(self, "Export terminé", f"Montage enregistré :\n{output_path}")
+
+    def _on_team_export_error(self, message) -> None:
+        self._export_progress_dialog.close()
+        QMessageBox.critical(self, "Erreur d'export", message)
