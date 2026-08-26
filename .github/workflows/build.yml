@@ -24,12 +24,33 @@ jobs:
           pip install pyinstaller
 
       - name: Download ffmpeg
+        shell: pwsh
         run: |
-          curl -L -o ffmpeg.zip https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip
-          Expand-Archive ffmpeg.zip -DestinationPath ffmpeg_extracted
-          New-Item -ItemType Directory -Force -Path bin
-          $exe = Get-ChildItem -Path ffmpeg_extracted -Recurse -Filter ffmpeg.exe | Select-Object -First 1
-          Copy-Item $exe.FullName -Destination bin\ffmpeg.exe
+          Invoke-WebRequest `
+            -Uri "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip" `
+            -OutFile "ffmpeg.zip"
+
+          if ((Get-Item "ffmpeg.zip").Length -lt 1000000) {
+            Write-Error "FFmpeg archive is unexpectedly small."
+            exit 1
+          }
+
+          Expand-Archive -Path "ffmpeg.zip" -DestinationPath "ffmpeg_extracted" -Force
+
+          New-Item -ItemType Directory -Force -Path "bin"
+
+          $exe = Get-ChildItem `
+            -Path "ffmpeg_extracted" `
+            -Recurse `
+            -Filter "ffmpeg.exe" |
+            Select-Object -First 1
+
+          if (-not $exe) {
+            Write-Error "ffmpeg.exe not found in the downloaded archive."
+            exit 1
+          }
+
+          Copy-Item $exe.FullName -Destination "bin\ffmpeg.exe"
 
       - name: Build with PyInstaller
         run: |
