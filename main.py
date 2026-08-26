@@ -51,7 +51,7 @@ def main() -> None:
 
     sys.excepthook = show_exception
 
-    database = Database("basketball_stats.db")
+    database = Database()
 
     window = LaunchWindow(database)
     window.show()

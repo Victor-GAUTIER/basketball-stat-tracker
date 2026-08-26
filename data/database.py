@@ -23,7 +23,7 @@ def get_default_db_path() -> str:
     app_name = "BasketballStatTracker"
 
     if sys.platform == "win32":
-        base_dir = os.environ.get("APPDATA", os.path.expanduser("~"))
+        base_dir = os.environ.get("LOCALAPPDATA", os.path.expanduser("~"))
     elif sys.platform == "darwin":
         base_dir = os.path.expanduser("~/Library/Application Support")
     else:
