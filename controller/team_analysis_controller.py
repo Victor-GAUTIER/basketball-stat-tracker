@@ -706,8 +706,14 @@ def compute_player_averages(
             "BLK": blk / games_played,
             "TOV": tov / games_played,
             "PF": pf / games_played,
+            "FGM": fg_made,
+            "FGA": fg_att,
             "FG_PCT": (fg_made / fg_att * 100) if fg_att else 0.0,
+            "3PM": three_made,
+            "3PA": three_att,
             "3PT_PCT": (three_made / three_att * 100) if three_att else 0.0,
+            "FTM": ft_made,
+            "FTA": ft_att,
             "FT_PCT": (ft_made / ft_att * 100) if ft_att else 0.0,
         }
 

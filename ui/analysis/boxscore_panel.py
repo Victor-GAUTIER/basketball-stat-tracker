@@ -28,8 +28,11 @@ HEADERS = [
     "BLK",
     "TOV",
     "PF",
+    "FG (M/A)",
     "FG%",
+    "3PT (M/A)",
     "3PT%",
+    "FT (M/A)",
     "FT%",
 ]
 
@@ -169,13 +172,19 @@ class BoxscorePanel(QWidget):
                     f"{stats['BLK']:.1f}",
                     f"{stats['TOV']:.1f}",
                     f"{stats['PF']:.1f}",
+                    f"{int(stats['FGM'])}/{int(stats['FGA'])}",
                     f"{stats['FG_PCT']:.0f}%",
+                    f"{int(stats['3PM'])}/{int(stats['3PA'])}",
                     f"{stats['3PT_PCT']:.0f}%",
+                    f"{int(stats['FTM'])}/{int(stats['FTA'])}",
                     f"{stats['FT_PCT']:.0f}%",
                 ]
 
             for col, value in enumerate(values):
                 table.setItem(row, col, QTableWidgetItem(str(value)))
+
+        table.setSortingEnabled(True)
+        table.resizeColumnsToContents()
 
         table.setSortingEnabled(True)
         table.resizeColumnsToContents()
