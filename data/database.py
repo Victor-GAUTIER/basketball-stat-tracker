@@ -8,10 +8,31 @@ passer par les méthodes de la classe Database.
 
 from __future__ import annotations
 
+import os
+import sys
 import sqlite3
 from typing import Dict, List, Optional, Tuple
 
 from data.models import Event, Game, Player, Team
+
+
+def get_default_db_path() -> str:
+    """Retourne un chemin fixe et propre à l'utilisateur pour la base de
+    données, indépendant du dossier depuis lequel l'app est lancée."""
+
+    app_name = "BasketballStatTracker"
+
+    if sys.platform == "win32":
+        base_dir = os.environ.get("APPDATA", os.path.expanduser("~"))
+    elif sys.platform == "darwin":
+        base_dir = os.path.expanduser("~/Library/Application Support")
+    else:
+        base_dir = os.path.expanduser("~/.local/share")
+
+    app_dir = os.path.join(base_dir, app_name)
+    os.makedirs(app_dir, exist_ok=True)
+
+    return os.path.join(app_dir, "basketball_stats.db")
 
 
 # Couleur par défaut attribuée à une équipe qui n'en a pas encore choisi une
@@ -85,8 +106,8 @@ CREATE TABLE IF NOT EXISTS events (
 class Database:
     """Gère la connexion SQLite et toutes les opérations CRUD de l'application."""
 
-    def __init__(self, db_path: str = "basketball_stats.db") -> None:
-        self.db_path = db_path
+    def __init__(self, db_path: Optional[str] = None) -> None:
+        self.db_path = db_path or get_default_db_path()
         self._connection: Optional[sqlite3.Connection] = None
         self._connect()
         self._create_schema()
