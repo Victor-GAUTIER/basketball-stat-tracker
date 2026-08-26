@@ -321,12 +321,36 @@ def _build_stat_row(
 
     return row
 
+_ACTION_COLOR_PALETTE = [
+    "#297ffe", "#e51f1f", "#2ecc71", "#f1c40f", "#9b59b6",
+    "#e67e22", "#1abc9c", "#e84393", "#7f8c8d", "#3498db",
+]
+
+
+def _build_action_color_map(*data_dicts: Dict[str, float]) -> Dict[str, str]:
+    """Attribue une couleur fixe à chaque type d'action, identique quel
+    que soit le graphique où elle apparaît (points marqués / encaissés,
+    domicile / extérieur...). Les actions sont triées par ordre
+    alphabétique pour que l'attribution reste stable d'un rafraîchissement
+    à l'autre."""
+
+    actions = sorted({
+        action
+        for d in data_dicts
+        for action in d
+    })
+
+    return {
+        action: _ACTION_COLOR_PALETTE[i % len(_ACTION_COLOR_PALETTE)]
+        for i, action in enumerate(actions)
+    }
 
 
 def _plot_pie(
     ax,
     data: Dict[str, float],
-    title: str
+    title: str,
+    color_map: Optional[Dict[str, str]] = None,
 ):
 
     if not data:
@@ -342,19 +366,29 @@ def _plot_pie(
 
         return
 
-
-    labels = list(
-        data.keys()
+    # Tri par taille de secteur décroissante, pour une lecture plus
+    # naturelle (plus gros secteur en premier). Les couleurs restent
+    # associées à l'action via color_map, donc cet ordre peut différer
+    # d'un camembert à l'autre sans casser la cohérence des couleurs.
+    sorted_items = sorted(
+        data.items(),
+        key=lambda item: item[1],
+        reverse=True,
     )
 
-    values = list(
-        data.values()
-    )
+    labels = [item[0] for item in sorted_items]
+    values = [item[1] for item in sorted_items]
 
+    colors = (
+        [color_map.get(label) for label in labels]
+        if color_map
+        else None
+    )
 
     wedges, texts, autotexts = ax.pie(
         values,
         labels=labels,
+        colors=colors,
         autopct="%1.0f%%",
         textprops={
             "fontsize":8,
@@ -376,6 +410,7 @@ def _plot_pie(
         fontweight="bold",
         color=TEXT_COLOR
     )
+
 
 def _plot_pie_2(
     ax,
@@ -1250,6 +1285,12 @@ class TeamAnalysisWindow(QMainWindow):
         )
 
 
+        action_colors = _build_action_color_map(
+            points,
+            points_against
+        )
+
+
         fig = Figure(
             figsize=(8,3.5)
         )
@@ -1264,14 +1305,16 @@ class TeamAnalysisWindow(QMainWindow):
         _plot_pie(
             ax1,
             points,
-            "Points marqués par action"
+            "Points marqués par action",
+            action_colors,
         )
 
 
         _plot_pie(
             ax2,
             points_against,
-            "Points encaissés par action"
+            "Points encaissés par action",
+            action_colors,
         )
 
 

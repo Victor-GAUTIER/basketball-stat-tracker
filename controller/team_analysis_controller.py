@@ -105,7 +105,7 @@ class TeamBoxScore:
 
     @property
     def possessions(self) -> float:
-        return self.fga + 0.44 * self.fta + self.tov
+        return self.fga + 0.44 * self.fta + self.tov - self.oreb
 
     @property
     def points_per_shot(self) -> float:
