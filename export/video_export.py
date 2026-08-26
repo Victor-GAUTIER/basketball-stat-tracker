@@ -137,7 +137,7 @@ class VideoExportWorker(QObject):
                         "-map", "0:a:0?",
                         "-c:v", "libx264",
                         "-preset", "veryfast",
-                        "-vsync", "cfr",
+                        "-fps_mode", "cfr",
                         "-c:a", "aac",
                         "-ar", "48000",
                         "-af", "aresample=async=1",
