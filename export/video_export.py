@@ -8,6 +8,7 @@ from typing import Dict, List, Optional, Union
 from PySide6.QtCore import QObject, QThread, Signal
 
 from data.models import Event
+from data.ffmpeg_path import get_ffmpeg_path
 
 
 class VideoExportWorker(QObject):
@@ -127,7 +128,7 @@ class VideoExportWorker(QObject):
                     segment_path = os.path.join(tmp_dir, f"seg_{i:04d}.mp4")
 
                     cmd = [
-                        "ffmpeg",
+                        get_ffmpeg_path(),
                         "-y",
                         "-ss", f"{start:.3f}",
                         "-i", video_path,
@@ -173,7 +174,7 @@ class VideoExportWorker(QObject):
                 #    exactement les mêmes paramètres.
                 # -------------------------
 
-                concat_cmd = ["ffmpeg", "-y"]
+                concat_cmd = [get_ffmpeg_path(), "-y"]
 
                 for path in segment_paths:
                     concat_cmd += ["-i", path]

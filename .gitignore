@@ -10,3 +10,9 @@ events.csv
 
 basket_scout.db
 *.db
+
+bin/
+build/
+dist/
+*.spec
+**/.DS_Store
