@@ -1,1 +1,3 @@
 PySide6>=6.6
+opencv-python
+matplotlib
