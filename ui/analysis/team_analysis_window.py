@@ -12,6 +12,9 @@ os.environ.setdefault("QT_API", "pyside6")
 
 from typing import Dict, List, Optional, Tuple
 
+from ui.theme import get_chart_colors, get_court_asset_name, theme_manager
+from ui.utils import resource_path
+
 from PySide6.QtCore import Qt, QThread
 from PySide6.QtWidgets import (
     QFileDialog,
@@ -65,12 +68,29 @@ OPPONENT_COLOR = "#b0b0b0"
 MADE_COLOR = "#297ffe"
 MISSED_COLOR = "#e51f1f"
 
-DARK_BG = "#121212"
-CARD_BG = "#252525"
 BORDER_COLOR = "#555555"
 
-TEXT_COLOR = "#eeeeee"
-SECONDARY_TEXT = "#aaaaaa"
+# Ces quatre couleurs dépendent du thème actif et sont resynchronisées à
+# chaque changement de thème (voir TeamAnalysisWindow._on_theme_changed).
+DARK_BG = ""
+CARD_BG = ""
+TEXT_COLOR = ""
+SECONDARY_TEXT = ""
+
+
+def _refresh_theme_colors() -> None:
+
+    global DARK_BG, CARD_BG, TEXT_COLOR, SECONDARY_TEXT
+
+    colors = get_chart_colors()
+
+    DARK_BG = colors["background"]
+    CARD_BG = colors["card"]
+    TEXT_COLOR = colors["text"]
+    SECONDARY_TEXT = colors["secondary_text"]
+
+
+_refresh_theme_colors()
 
 
 
@@ -743,6 +763,8 @@ class TeamAnalysisWindow(QMainWindow):
 
         self._build_ui()
 
+        theme_manager.theme_changed.connect(self._on_theme_changed)
+
     # =====================================================
     # Construction interface
     # =====================================================
@@ -867,7 +889,26 @@ class TeamAnalysisWindow(QMainWindow):
             "Play by play"
         )
 
+    def _on_theme_changed(self, theme: str) -> None:
+        """Reconstruit entièrement l'interface (couleurs + graphiques)
+        avec les couleurs du nouveau thème. setCentralWidget() se charge
+        de détruire proprement l'ancien contenu (widgets, figures
+        matplotlib) à chaque appel."""
 
+        _refresh_theme_colors()
+
+        current_tab_index = (
+            self.centralWidget().findChild(QTabWidget).currentIndex()
+            if self.centralWidget() is not None
+            else 0
+        )
+
+        self._build_ui()
+
+        tabs = self.centralWidget().findChild(QTabWidget)
+
+        if tabs is not None and 0 <= current_tab_index < tabs.count():
+            tabs.setCurrentIndex(current_tab_index)
 
     # =====================================================
     # Onglet Overview
@@ -1540,8 +1581,11 @@ class TeamAnalysisWindow(QMainWindow):
 
 
 
+        from ui.theme import get_court_asset_name
+        from ui.utils import resource_path
+
         panel = ShotChartSummaryPanel(
-            resource_path("assets/court.svg")
+            resource_path(f"assets/{get_court_asset_name()}")
         )
 
 

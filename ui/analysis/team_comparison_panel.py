@@ -39,21 +39,28 @@ from matplotlib.figure import Figure
 
 from data.models import Player
 
-# Note : TeamComparisonData (controller.analysis_controller) n'est utilisé
-# ici que comme annotation de type. On évite volontairement de l'importer
-# au niveau module pour ne pas créer de dépendance circulaire avec
-# controller.analysis_controller ; grâce à `from __future__ import
-# annotations` (en tête de fichier), les annotations ne sont de toute façon
-# jamais évaluées à l'exécution.
-
+from ui.theme import get_chart_colors, theme_manager
 
 DEFAULT_HOME_COLOR = "#2980b9"
 DEFAULT_AWAY_COLOR = "#e67e22"
 
-# Couleurs pour le mode sombre : fond des figures/cartes et texte.
-FIGURE_BG_COLOR = "#3a3a3a"
-FIGURE_TEXT_COLOR = "#f0f0f0"
+# Couleurs des figures/cartes, dépendantes du thème actif — voir
+# _refresh_theme_colors(), rappelée à chaque changement de thème.
+FIGURE_BG_COLOR = ""
+FIGURE_TEXT_COLOR = ""
 
+
+def _refresh_theme_colors() -> None:
+
+    global FIGURE_BG_COLOR, FIGURE_TEXT_COLOR
+
+    colors = get_chart_colors()
+
+    FIGURE_BG_COLOR = colors["card"]
+    FIGURE_TEXT_COLOR = colors["text"]
+
+
+_refresh_theme_colors()
 
 # Statistiques affichées comme barres de comparaison tête-à-tête, dans
 # l'onglet Overview (clé_dans_team_stats, libellé, "pct" ou "count").
@@ -539,6 +546,8 @@ class TeamComparisonPanel(QWidget):
 
         self.tabs.currentChanged.connect(self._on_tab_changed)
 
+        theme_manager.theme_changed.connect(self._on_theme_changed)
+
     # =====================================================
     # Rafraîchissement
     # =====================================================
@@ -601,6 +610,26 @@ class TeamComparisonPanel(QWidget):
 
         if index in self._dirty_tabs and self._latest is not None:
             self._rebuild_tab(index)
+
+    def _on_theme_changed(self, theme: str) -> None:
+        """Reconstruit les graphiques de l'onglet actuellement visible
+        avec les couleurs du nouveau thème ; les autres onglets seront
+        reconstruits à la volée dès qu'ils redeviennent visibles (même
+        mécanisme que le rafraîchissement différé habituel)."""
+
+        _refresh_theme_colors()
+
+        self._dirty_tabs = {
+            self.TAB_OVERVIEW,
+            self.TAB_ADRESSE,
+            self.TAB_REBONDS,
+            self.TAB_TURNOVERS,
+            self.TAB_FOULS,
+        }
+
+        if self._latest is not None:
+            self._rebuild_tab(self.tabs.currentIndex())
+
 
     def _rebuild_tab(self, index: int) -> None:
 

@@ -16,6 +16,9 @@ from __future__ import annotations
 
 from typing import Dict, List, Optional
 
+from ui.theme import get_chart_colors, get_court_asset_name, theme_manager
+from ui.utils import resource_path
+
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QFont, QPainter, QPen, QPixmap, QTransform
 from PySide6.QtWidgets import (
@@ -60,6 +63,8 @@ class ShotChartSummaryWidget(QWidget):
         self._home_color = self.HOME_COLOR
         self._away_color = self.AWAY_COLOR
 
+        theme_manager.theme_changed.connect(self._on_theme_changed)
+
     def set_team_labels(self, home_label: str, away_label: str) -> None:
         self._home_label = home_label
         self._away_label = away_label
@@ -69,6 +74,14 @@ class ShotChartSummaryWidget(QWidget):
             self._home_color = QColor(home_color)
             self._away_color = QColor(away_color)
             self.update()
+
+    def _on_theme_changed(self, theme: str) -> None:
+
+        self.pixmap = QPixmap(
+            resource_path(f"assets/{get_court_asset_name(theme)}")
+        )
+
+        self.update()
 
     def set_shots(self, markers: List[Dict]) -> None:
         """markers : liste de dicts {x, y, made, is_home, player_id},
@@ -84,6 +97,13 @@ class ShotChartSummaryWidget(QWidget):
 
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        background_color = get_chart_colors()["card"]
+
+        painter.fillRect(
+            self.rect(),
+            QColor(background_color)
+        )
 
         # Même transformation que le terrain de saisie : rotation 90°,
         # redimensionnement en conservant les proportions, centrage.

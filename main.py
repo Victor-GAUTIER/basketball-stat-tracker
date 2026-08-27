@@ -10,6 +10,7 @@ from PySide6.QtWidgets import QApplication, QMessageBox
 
 from data.database import Database
 from ui.launch_window import LaunchWindow
+from ui.theme import apply_theme, get_theme_setting
 
 
 def show_exception(exc_type, exc_value, exc_traceback) -> None:
@@ -23,17 +24,7 @@ def show_exception(exc_type, exc_value, exc_traceback) -> None:
         )
     )
 
-    # Sauvegarde dans un fichier à côté de l'exécutable.
-    try:
-        log_path = Path("error.log")
-        log_path.write_text(
-            error,
-            encoding="utf-8",
-        )
-    except Exception:
-        pass
 
-    # Affichage dans l'application.
     try:
         QMessageBox.critical(
             None,
@@ -48,6 +39,9 @@ def show_exception(exc_type, exc_value, exc_traceback) -> None:
 def main() -> None:
     app = QApplication(sys.argv)
     app.setApplicationName("Basketball Stat Tracker")
+    app.setOrganizationName("RennesAvenir")
+
+    apply_theme(app, get_theme_setting())
 
     sys.excepthook = show_exception
 

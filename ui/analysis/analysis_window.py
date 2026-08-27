@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import List
 
 from PySide6.QtCore import Qt, QTimer, QThread, QEvent
-from PySide6.QtGui import QKeySequence, QShortcut, QAction
+from PySide6.QtGui import QKeySequence, QShortcut, QAction, QActionGroup
 from PySide6.QtWidgets import (
     QFileDialog,
     QHBoxLayout,
@@ -44,6 +44,7 @@ from ui.analysis.team_comparison_panel import TeamComparisonPanel
 from ui.analysis.turnover_dialog import TurnoverTypeDialog
 from ui.analysis.shot_details_dialog import ShotDetailsDialog
 from ui.utils import resource_path
+from ui.theme import THEME_DARK, THEME_LIGHT, apply_theme, get_theme_setting, set_theme_setting
 
 from dataclasses import replace
 
@@ -599,8 +600,10 @@ class AnalysisWindow(QMainWindow):
         # ONGLET SHOT CHART
         # =========================
 
+        from ui.theme import get_court_asset_name
+
         self.shot_chart_summary_panel = ShotChartSummaryPanel(
-            resource_path("assets/court.svg"),
+            resource_path(f"assets/{get_court_asset_name()}"),
             self
         )
 
@@ -788,7 +791,60 @@ class AnalysisWindow(QMainWindow):
             change_game_action
         )
 
+        # -------------------------
+        # Menu Affichage > Thème
+        # -------------------------
 
+        display_menu = menu_bar.addMenu(
+            "Affichage"
+        )
+
+        theme_submenu = display_menu.addMenu(
+            "Thème"
+        )
+
+        theme_action_group = QActionGroup(self)
+        theme_action_group.setExclusive(True)
+
+        dark_action = QAction(
+            "Sombre",
+            self
+        )
+        dark_action.setCheckable(True)
+
+        light_action = QAction(
+            "Clair",
+            self
+        )
+        light_action.setCheckable(True)
+
+        current_theme = get_theme_setting()
+
+        dark_action.setChecked(current_theme != THEME_LIGHT)
+        light_action.setChecked(current_theme == THEME_LIGHT)
+
+        dark_action.triggered.connect(
+            lambda: self._on_theme_selected(THEME_DARK)
+        )
+
+        light_action.triggered.connect(
+            lambda: self._on_theme_selected(THEME_LIGHT)
+        )
+
+        theme_action_group.addAction(dark_action)
+        theme_action_group.addAction(light_action)
+
+        theme_submenu.addAction(dark_action)
+        theme_submenu.addAction(light_action)
+
+    def _on_theme_selected(self, theme: str) -> None:
+
+        set_theme_setting(theme)
+
+        apply_theme(
+            QApplication.instance(),
+            theme
+        )
 
     def _change_quarter(
         self,

@@ -7,6 +7,8 @@ from __future__ import annotations
 
 from typing import Dict, List, Optional
 
+from ui.theme import get_chart_colors, theme_manager
+
 from PySide6.QtWidgets import (
     QLabel,
     QTableWidget,
@@ -65,6 +67,8 @@ class BoxscorePanel(QWidget):
         layout.addWidget(self.away_title)
         layout.addWidget(self.away_table)
 
+        theme_manager.theme_changed.connect(self._on_theme_changed)
+
     def _configure_table(self, table: QTableWidget) -> None:
 
         table.setColumnCount(len(HEADERS))
@@ -72,37 +76,59 @@ class BoxscorePanel(QWidget):
         table.verticalHeader().setVisible(False)
         table.setSortingEnabled(True)
 
-        # Une ligne sur deux légèrement plus claire, et des lignes de
-        # séparation visibles entre chaque ligne/colonne. Couleurs
-        # alignées sur le thème sombre déjà utilisé dans
-        # TeamAnalysisWindow (CARD_BG / TEXT_COLOR / BORDER_COLOR) : la
-        # fenêtre parente force un fond sombre + texte clair sur tous ses
-        # widgets, donc un style blanc classique rendrait le texte
-        # illisible ici.
         table.setAlternatingRowColors(True)
         table.setShowGrid(True)
 
+        self._apply_table_style(table)
+
+    def _apply_table_style(self, table: QTableWidget) -> None:
+        """Applique le style de tableau (couleurs) correspondant au thème
+        actif. Séparé de _configure_table pour pouvoir être rappelé seul
+        au changement de thème, sans reconfigurer colonnes/tri à chaque
+        fois."""
+
+        colors = get_chart_colors()
+
+        background = colors["card"]
+        text = colors["text"]
+
+        # Ligne alternée et bordures : un ton légèrement différent du
+        # fond principal, calculé simplement selon qu'on est en thème
+        # sombre ou clair.
+        is_light = background.lower() in ("#ffffff", "#fff")
+
+        alternate = "#f0f0f0" if is_light else "#2f2f2f"
+        border = "#cccccc" if is_light else "#555555"
+        header_bg = "#e8e8e8" if is_light else "#333333"
+
         table.setStyleSheet(
-            """
-            QTableWidget {
-                background-color: #252525;
-                alternate-background-color: #2f2f2f;
-                gridline-color: #555555;
-                color: #eeeeee;
-                border: 1px solid #555555;
-            }
-            QTableWidget::item {
+            f"""
+            QTableWidget {{
+                background-color: {background};
+                alternate-background-color: {alternate};
+                gridline-color: {border};
+                color: {text};
+                border: 1px solid {border};
+            }}
+            QTableWidget::item {{
                 padding: 4px;
-            }
-            QHeaderView::section {
-                background-color: #333333;
-                color: #eeeeee;
+            }}
+            QHeaderView::section {{
+                background-color: {header_bg};
+                color: {text};
                 padding: 4px;
-                border: 1px solid #555555;
+                border: 1px solid {border};
                 font-weight: bold;
-            }
+            }}
             """
         )
+
+    def _on_theme_changed(self, theme: str) -> None:
+        """Réapplique le style de tableau avec les couleurs du nouveau
+        thème, sans reconstruire tout le panneau."""
+
+        self._apply_table_style(self.home_table)
+        self._apply_table_style(self.away_table)
 
     # =====================================================
     # Actualisation
