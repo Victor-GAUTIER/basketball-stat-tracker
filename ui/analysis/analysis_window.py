@@ -45,6 +45,8 @@ from ui.analysis.turnover_dialog import TurnoverTypeDialog
 from ui.analysis.shot_details_dialog import ShotDetailsDialog
 from ui.utils import resource_path
 from ui.theme import THEME_DARK, THEME_LIGHT, apply_theme, get_theme_setting, set_theme_setting
+from ui.event_config_dialog import EventConfigDialog
+from ui.feature_flags import feature_flags
 
 from dataclasses import replace
 
@@ -129,6 +131,8 @@ class AnalysisWindow(QMainWindow):
 
 
         self._build_ui()
+
+        feature_flags.changed.connect(self._on_feature_flags_changed)
 
         self._create_menu()
 
@@ -391,6 +395,10 @@ class AnalysisWindow(QMainWindow):
 
         self.phase_panel = PhasePanel(
             self
+        )
+
+        self.phase_panel.setVisible(
+            feature_flags.is_phase_panel_enabled()
         )
 
         video_layout.addWidget(
@@ -837,6 +845,23 @@ class AnalysisWindow(QMainWindow):
         theme_submenu.addAction(dark_action)
         theme_submenu.addAction(light_action)
 
+        display_menu.addSeparator()
+
+        event_config_action = QAction(
+            "Configuration des événements...",
+            self
+        )
+
+        event_config_action.setMenuRole(
+            QAction.MenuRole.NoRole
+        )
+
+        event_config_action.triggered.connect(
+            self._on_open_event_config
+        )
+
+        display_menu.addAction(event_config_action)
+
     def _on_theme_selected(self, theme: str) -> None:
 
         set_theme_setting(theme)
@@ -844,6 +869,17 @@ class AnalysisWindow(QMainWindow):
         apply_theme(
             QApplication.instance(),
             theme
+        )
+
+    def _on_open_event_config(self) -> None:
+
+        dialog = EventConfigDialog(self)
+        dialog.exec()
+
+    def _on_feature_flags_changed(self) -> None:
+
+        self.phase_panel.setVisible(
+            feature_flags.is_phase_panel_enabled()
         )
 
     def _change_quarter(
@@ -1757,19 +1793,21 @@ class AnalysisWindow(QMainWindow):
 
         if event_code in ("FT_MADE", "FT_MISSED"):
 
-            details_dialog = ShotDetailsDialog(
-                self,
-                show_defense=False,
-                show_dribbles=False,
-                title="Détails du lancer franc",
-            )
+            if feature_flags.is_shot_details_dialog_enabled():
 
-            if details_dialog.exec() != ShotDetailsDialog.DialogCode.Accepted:
+                details_dialog = ShotDetailsDialog(
+                    self,
+                    show_defense=False,
+                    show_dribbles=False,
+                    title="Détails du lancer franc",
+                )
 
-                return
+                if details_dialog.exec() != ShotDetailsDialog.DialogCode.Accepted:
 
-            action_type = details_dialog.selected_action_type()
-            prior_oreb = details_dialog.prior_oreb()
+                    return
+
+                action_type = details_dialog.selected_action_type()
+                prior_oreb = details_dialog.prior_oreb()
 
         phase = self.phase_panel.current_phase()
         system = self.phase_panel.current_system()
@@ -1941,17 +1979,25 @@ class AnalysisWindow(QMainWindow):
         # l'enregistrement du tir (même logique que TurnoverTypeDialog).
         # -------------------------
 
-        details_dialog = ShotDetailsDialog(self)
+        if feature_flags.is_shot_details_dialog_enabled():
 
-        if details_dialog.exec() != ShotDetailsDialog.DialogCode.Accepted:
+            details_dialog = ShotDetailsDialog(self)
 
-            return
+            if details_dialog.exec() != ShotDetailsDialog.DialogCode.Accepted:
 
+                return
 
-        action_type = details_dialog.selected_action_type()
-        defense_level = details_dialog.selected_defense_level()
-        prior_oreb = details_dialog.prior_oreb()
-        dribbles = details_dialog.dribbles_count()
+            action_type = details_dialog.selected_action_type()
+            defense_level = details_dialog.selected_defense_level()
+            prior_oreb = details_dialog.prior_oreb()
+            dribbles = details_dialog.dribbles_count()
+
+        else:
+
+            action_type = None
+            defense_level = None
+            prior_oreb = None
+            dribbles = None
 
 
         phase = self.phase_panel.current_phase()

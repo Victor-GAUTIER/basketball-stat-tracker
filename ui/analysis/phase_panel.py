@@ -1,3 +1,13 @@
+"""Widget de sélection de la phase de jeu et du système, pendant la
+saisie d'un événement.
+
+Les phases, systèmes, types d'action et niveaux de défense affichés ici
+(et dans ShotDetailsDialog / EditEventDialog) ne sont plus codés en dur :
+ils viennent de la configuration persistante gérée par
+data.event_config.event_config, modifiable depuis le menu
+Affichage > Configuration des événements (voir ui.event_config_dialog).
+"""
+
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
     QWidget,
@@ -7,56 +17,7 @@ from PySide6.QtWidgets import (
     QPushButton,
 )
 
-
-PHASES = {
-
-    "Contre-attaque": [],
-
-    "Transition": [
-        "Stream",
-        "Ghost",
-        "Flash",
-        "Boum",
-        "Bas",
-    ],
-
-    "Attaque placée": [
-        "Poing",
-        "2",
-        "Maillot",
-    ],
-
-    "Touche": [
-        "TF1",
-        "TF2",
-        "TC",
-    ],
-}
-
-
-# Conservé ici comme source de vérité unique (utilisé par
-# ShotDetailsDialog et EditEventDialog), même si PhasePanel n'affiche plus
-# lui-même de boutons "Type d'action" : cette info est désormais saisie au
-# moment du tir, via le popup ShotDetailsDialog (voir
-# AnalysisWindow._on_shot_clicked).
-ACTION_TYPES = [
-    "Jeu rapide",
-    "PnR",
-    "Drive",
-    "Poste bas",
-    "Coupe",
-    "Reb off",
-    "Écran non porteur",
-    "Mouvement de balle",
-]
-
-
-# Niveau de défense subi sur un tir, saisi via ShotDetailsDialog.
-DEFENSE_LEVELS = [
-    ("OUVERT", "Ouvert"),
-    ("PEU_DEFENDU", "Un peu défendu"),
-    ("TRES_DEFENDU", "Très défendu"),
-]
+from data.event_config import event_config
 
 
 BUTTON_STYLE = """
@@ -89,6 +50,7 @@ class PhasePanel(QWidget):
         self._current_phase = None
         self._current_system = None
 
+        self._phase_buttons = {}
         self._system_buttons = {}
 
         # -------------------------
@@ -98,20 +60,11 @@ class PhasePanel(QWidget):
         self.phase_row = QHBoxLayout()
         self.phase_row.addWidget(QLabel("Phase"))
 
-        self._phase_buttons = {}
+        self._phase_buttons_container = QWidget()
+        self._phase_buttons_layout = QHBoxLayout(self._phase_buttons_container)
+        self._phase_buttons_layout.setContentsMargins(0, 0, 0, 0)
 
-        for phase in PHASES:
-
-            btn = self._make_button(phase)
-
-            btn.clicked.connect(
-                lambda checked=False, p=phase: self._on_phase_clicked(p)
-            )
-
-            self._phase_buttons[phase] = btn
-
-            self.phase_row.addWidget(btn)
-
+        self.phase_row.addWidget(self._phase_buttons_container)
         self.phase_row.addStretch()
 
         main_layout.addLayout(self.phase_row)
@@ -124,11 +77,7 @@ class PhasePanel(QWidget):
         self.system_row.addWidget(QLabel("Système"))
 
         self._system_buttons_container = QWidget()
-
-        self._system_buttons_layout = QHBoxLayout(
-            self._system_buttons_container
-        )
-
+        self._system_buttons_layout = QHBoxLayout(self._system_buttons_container)
         self._system_buttons_layout.setContentsMargins(0, 0, 0, 0)
 
         self.system_row.addWidget(self._system_buttons_container)
@@ -136,10 +85,9 @@ class PhasePanel(QWidget):
 
         main_layout.addLayout(self.system_row)
 
-        # Sélection initiale : première phase de la liste
-        first_phase = next(iter(PHASES))
+        event_config.changed.connect(self.refresh_from_config)
 
-        self._select_phase(first_phase)
+        self.refresh_from_config()
 
     # =====================================================
     # Construction bouton
@@ -148,12 +96,52 @@ class PhasePanel(QWidget):
     def _make_button(self, text):
 
         btn = QPushButton(text)
-
         btn.setCheckable(True)
-
         btn.setStyleSheet(BUTTON_STYLE)
 
         return btn
+
+    # =====================================================
+    # (Re)construction depuis la configuration
+    # =====================================================
+
+    def refresh_from_config(self):
+        """Reconstruit entièrement les boutons de phase (et de système
+        pour la phase actuellement sélectionnée) à partir de la
+        configuration active. Appelé au démarrage et à chaque
+        modification de la configuration (ajout/suppression/activation)."""
+
+        while self._phase_buttons_layout.count():
+            item = self._phase_buttons_layout.takeAt(0)
+            widget = item.widget()
+            if widget:
+                widget.deleteLater()
+
+        self._phase_buttons = {}
+
+        phases = event_config.active_phase_names()
+
+        for phase in phases:
+
+            btn = self._make_button(phase)
+
+            btn.clicked.connect(
+                lambda checked=False, p=phase: self._on_phase_clicked(p)
+            )
+
+            self._phase_buttons[phase] = btn
+
+            self._phase_buttons_layout.addWidget(btn)
+
+        # Conserve la phase actuellement choisie si elle existe toujours,
+        # sinon retombe sur la première phase active disponible.
+        if self._current_phase not in phases:
+            self._current_phase = phases[0] if phases else None
+
+        if self._current_phase is not None:
+            self._select_phase(self._current_phase, emit=False)
+        else:
+            self._rebuild_system_buttons(None)
 
     # =====================================================
     # Phase
@@ -163,7 +151,7 @@ class PhasePanel(QWidget):
 
         self._select_phase(phase)
 
-    def _select_phase(self, phase):
+    def _select_phase(self, phase, emit: bool = True):
 
         for p, btn in self._phase_buttons.items():
 
@@ -173,7 +161,8 @@ class PhasePanel(QWidget):
 
         self._rebuild_system_buttons(phase)
 
-        self.emit_change()
+        if emit:
+            self.emit_change()
 
     def _rebuild_system_buttons(self, phase):
 
@@ -190,7 +179,9 @@ class PhasePanel(QWidget):
 
         self._current_system = None
 
-        for system in PHASES.get(phase, []):
+        systems = event_config.active_system_names(phase) if phase else []
+
+        for system in systems:
 
             btn = self._make_button(system)
 

@@ -18,6 +18,13 @@ Contrairement aux raccourcis utilisés pendant la saisie en direct, ce
 popup n'a pas besoin d'être ultra-rapide : il apparaît une fois le tir
 cliqué, donc après coup, ce qui laisse le temps de rembobiner la vidéo si
 besoin (notamment pour compter les dribbles avec précision).
+
+Les types d'action et niveaux de défense affichés viennent de la
+configuration personnalisable (data.event_config), modifiable depuis le
+menu Affichage > Configuration des événements. La présence de chaque
+champ (type d'action, défense, rebond offensif préalable, dribbles), et
+du popup lui-même, dépend en plus des préférences d'affichage locales au
+poste (ui.feature_flags), également réglables depuis cette même fenêtre.
 """
 
 from __future__ import annotations
@@ -36,7 +43,9 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ui.analysis.phase_panel import ACTION_TYPES, BUTTON_STYLE, DEFENSE_LEVELS
+from data.event_config import event_config
+from ui.analysis.phase_panel import BUTTON_STYLE
+from ui.feature_flags import feature_flags
 
 
 class ShotDetailsDialog(QDialog):
@@ -58,8 +67,14 @@ class ShotDetailsDialog(QDialog):
         self.setWindowTitle(title)
         self.setMinimumWidth(420)
 
-        self._show_defense = show_defense
-        self._show_dribbles = show_dribbles
+        # La visibilité effective de chaque champ combine le paramètre
+        # d'appel (ex: show_defense=False pour un lancer franc, où la
+        # défense n'a pas de sens) et la préférence d'affichage locale du
+        # poste (voir ui.feature_flags).
+        self._show_action_type = feature_flags.is_field_enabled("action_type")
+        self._show_defense = show_defense and feature_flags.is_field_enabled("defense")
+        self._show_prior_oreb = feature_flags.is_field_enabled("prior_oreb")
+        self._show_dribbles = show_dribbles and feature_flags.is_field_enabled("dribbles")
 
         self._current_action_type: Optional[str] = None
         self._current_defense_level: Optional[str] = None
@@ -73,25 +88,27 @@ class ShotDetailsDialog(QDialog):
         # Type d'action
         # -------------------------
 
-        layout.addWidget(QLabel("Type d'action"))
+        if self._show_action_type:
 
-        action_row = QHBoxLayout()
+            layout.addWidget(QLabel("Type d'action"))
 
-        for action in ACTION_TYPES:
+            action_row = QHBoxLayout()
 
-            btn = self._make_button(action)
+            for action in event_config.active_action_type_names():
 
-            btn.clicked.connect(
-                lambda checked=False, a=action: self._on_action_clicked(a)
-            )
+                btn = self._make_button(action)
 
-            self._action_buttons[action] = btn
+                btn.clicked.connect(
+                    lambda checked=False, a=action: self._on_action_clicked(a)
+                )
 
-            action_row.addWidget(btn)
+                self._action_buttons[action] = btn
 
-        action_row.addStretch()
+                action_row.addWidget(btn)
 
-        layout.addLayout(action_row)
+            action_row.addStretch()
+
+            layout.addLayout(action_row)
 
         # -------------------------
         # Défense (tirs de jeu uniquement)
@@ -103,15 +120,15 @@ class ShotDetailsDialog(QDialog):
 
             defense_row = QHBoxLayout()
 
-            for code, label in DEFENSE_LEVELS:
+            for label in event_config.active_defense_level_names():
 
                 btn = self._make_button(label)
 
                 btn.clicked.connect(
-                    lambda checked=False, c=code: self._on_defense_clicked(c)
+                    lambda checked=False, l=label: self._on_defense_clicked(l)
                 )
 
-                self._defense_buttons[code] = btn
+                self._defense_buttons[label] = btn
 
                 defense_row.addWidget(btn)
 
@@ -123,11 +140,15 @@ class ShotDetailsDialog(QDialog):
         # Rebond offensif préalable
         # -------------------------
 
-        self.prior_oreb_checkbox = QCheckBox(
-            "Après un rebond offensif (même possession)", self
-        )
+        self.prior_oreb_checkbox: Optional[QCheckBox] = None
 
-        layout.addWidget(self.prior_oreb_checkbox)
+        if self._show_prior_oreb:
+
+            self.prior_oreb_checkbox = QCheckBox(
+                "Après un rebond offensif (même possession)", self
+            )
+
+            layout.addWidget(self.prior_oreb_checkbox)
 
         # -------------------------
         # Nombre de dribbles préalables (tirs de jeu uniquement)
@@ -193,19 +214,19 @@ class ShotDetailsDialog(QDialog):
 
             self._current_action_type = action
 
-    def _on_defense_clicked(self, code: str) -> None:
+    def _on_defense_clicked(self, label: str) -> None:
 
-        if self._current_defense_level == code:
+        if self._current_defense_level == label:
 
             self._current_defense_level = None
-            self._defense_buttons[code].setChecked(False)
+            self._defense_buttons[label].setChecked(False)
 
         else:
 
-            for c, btn in self._defense_buttons.items():
-                btn.setChecked(c == code)
+            for l, btn in self._defense_buttons.items():
+                btn.setChecked(l == label)
 
-            self._current_defense_level = code
+            self._current_defense_level = label
 
     # =====================================================
     # Accès externe
@@ -218,6 +239,8 @@ class ShotDetailsDialog(QDialog):
         return self._current_defense_level
 
     def prior_oreb(self) -> bool:
+        if self.prior_oreb_checkbox is None:
+            return False
         return self.prior_oreb_checkbox.isChecked()
 
     def dribbles_count(self) -> Optional[int]:

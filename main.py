@@ -12,6 +12,8 @@ from data.database import Database
 from ui.launch_window import LaunchWindow
 from ui.theme import apply_theme, get_theme_setting
 
+from data.event_config import event_config
+
 
 def show_exception(exc_type, exc_value, exc_traceback) -> None:
     """Affiche et sauvegarde les exceptions non gérées."""
@@ -46,6 +48,8 @@ def main() -> None:
     sys.excepthook = show_exception
 
     database = Database()
+
+    event_config.load(database)
 
     window = LaunchWindow(database)
     window.show()

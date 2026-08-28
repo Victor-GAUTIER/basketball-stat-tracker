@@ -31,7 +31,7 @@ from PySide6.QtWidgets import (
 
 from data.models import Event, Player
 from ui.analysis.event_labels import EVENT_CHOICES
-from ui.analysis.phase_panel import ACTION_TYPES, DEFENSE_LEVELS, PHASES
+from data.event_config import event_config
 from ui.analysis.turnover_dialog import TURNOVER_TYPES
 
 
@@ -206,11 +206,9 @@ class EditEventDialog(QDialog):
             self
         )
 
-
         self.phase_combo.addItems(
-            PHASES.keys()
+            event_config.active_phase_names()
         )
-
 
         phase_index = self.phase_combo.findText(
             event.phase or ""
@@ -276,7 +274,7 @@ class EditEventDialog(QDialog):
 
 
         self.action_type_combo.addItems(
-            ACTION_TYPES
+            event_config.active_action_type_names()
         )
 
 
@@ -307,11 +305,11 @@ class EditEventDialog(QDialog):
             None
         )
 
-        for code, label in DEFENSE_LEVELS:
+        for label in event_config.active_defense_level_names():
 
             self.defense_combo.addItem(
                 label,
-                code
+                label
             )
 
         defense_index = self.defense_combo.findData(
@@ -474,10 +472,7 @@ class EditEventDialog(QDialog):
 
 
         self.system_combo.addItems(
-            PHASES.get(
-                phase,
-                []
-            )
+            event_config.active_system_names(phase)
         )
 
 
