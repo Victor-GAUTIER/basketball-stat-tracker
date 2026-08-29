@@ -13,6 +13,11 @@ permet de changer :
   de dribbles (si l'événement est un tir)
 
 L'horodatage reste inchangé.
+
+Les listes (phases, systèmes, types d'action, niveaux de défense,
+événements) viennent de la configuration personnalisable
+(data.event_config), modifiable depuis le menu
+Affichage > Configuration des événements.
 """
 
 from __future__ import annotations
@@ -29,9 +34,9 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from data.models import Event, Player
-from ui.analysis.event_labels import EVENT_CHOICES
 from data.event_config import event_config
+from data.models import Event, Player
+from ui.analysis.event_labels import event_label, get_event_choices
 from ui.analysis.turnover_dialog import TURNOVER_TYPES
 
 
@@ -107,7 +112,7 @@ class EditEventDialog(QDialog):
         )
 
 
-        for code, label in EVENT_CHOICES:
+        for code, label in get_event_choices():
 
             self.event_combo.addItem(
                 label,
@@ -120,11 +125,24 @@ class EditEventDialog(QDialog):
         )
 
 
-        if existing_index >= 0:
+        if existing_index < 0:
 
-            self.event_combo.setCurrentIndex(
-                existing_index
+            # L'événement en cours d'édition a un code qui n'apparaît
+            # plus dans la liste active (événement classique désactivé
+            # depuis, ou perte de balle avec un ancien sous-type) : on
+            # l'ajoute quand même pour ne pas perdre la sélection réelle
+            # de l'événement lors de l'ouverture du dialogue.
+            self.event_combo.addItem(
+                event_label(event.event_type),
+                event.event_type,
             )
+
+            existing_index = self.event_combo.count() - 1
+
+
+        self.event_combo.setCurrentIndex(
+            existing_index
+        )
 
 
         self.event_combo.currentIndexChanged.connect(
@@ -206,9 +224,11 @@ class EditEventDialog(QDialog):
             self
         )
 
+
         self.phase_combo.addItems(
             event_config.active_phase_names()
         )
+
 
         phase_index = self.phase_combo.findText(
             event.phase or ""

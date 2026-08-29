@@ -1,11 +1,17 @@
 """Fenêtre de configuration des événements personnalisables : phases de
-jeu, systèmes associés, types d'action et niveaux de défense.
+jeu, systèmes associés, types d'action, niveaux de défense, événements
+classiques (avec raccourci clavier), et préférences d'affichage locales
+au poste.
 
 Accessible depuis le menu Affichage > Configuration des événements (voir
-AnalysisWindow._create_menu). Les modifications sont appliquées
-immédiatement (écriture en base à chaque action), et se répercutent sans
-redémarrage sur tous les popups de saisie (PhasePanel, ShotDetailsDialog,
-EditEventDialog) grâce au signal data.event_config.event_config.changed.
+AnalysisWindow._create_menu). Les modifications de la configuration
+partagée (phases, systèmes, types d'action, niveaux de défense,
+événements) sont appliquées immédiatement (écriture en base à chaque
+action) et se répercutent sans redémarrage sur tous les popups de saisie
+(PhasePanel, EventPanel, ShotDetailsDialog, EditEventDialog) grâce au
+signal data.event_config.event_config.changed. Les préférences
+d'affichage (onglet Fonctionnalités) sont locales au poste (QSettings,
+voir ui.feature_flags).
 """
 
 from __future__ import annotations
@@ -184,6 +190,211 @@ class _ManagedListWidget(QWidget):
         self._on_delete(entry_id)
 
 
+class _EventTypesWidget(QWidget):
+    """Onglet de gestion des événements classiques (LF+, Rebonds, Passe
+    décisive, Perte de balle...) : renommer, changer le raccourci,
+    activer/désactiver, ajouter un nouvel événement personnalisé,
+    supprimer un événement personnalisé (les événements intégrés, marqués
+    "[intégré]", ne peuvent être que renommés/désactivés)."""
+
+    def __init__(self, parent: Optional[QWidget] = None) -> None:
+        super().__init__(parent)
+
+        layout = QVBoxLayout(self)
+
+        note = QLabel(
+            "Les événements marqués \"[intégré]\" ne peuvent pas être "
+            "supprimés (certains déclenchent un comportement spécifique "
+            "à la saisie), mais restent renommables, désactivables, et "
+            "leur raccourci reste modifiable."
+        )
+        note.setWordWrap(True)
+        note.setStyleSheet("color: grey;")
+        layout.addWidget(note)
+
+        self.list_widget = QListWidget(self)
+        self.list_widget.setSelectionMode(
+            QAbstractItemView.SelectionMode.SingleSelection
+        )
+        self.list_widget.itemChanged.connect(self._on_item_changed)
+        layout.addWidget(self.list_widget)
+
+        buttons_row = QHBoxLayout()
+
+        add_btn = QPushButton("Ajouter")
+        add_btn.clicked.connect(self._on_add_clicked)
+
+        rename_btn = QPushButton("Renommer")
+        rename_btn.clicked.connect(self._on_rename_clicked)
+
+        shortcut_btn = QPushButton("Changer le raccourci")
+        shortcut_btn.clicked.connect(self._on_shortcut_clicked)
+
+        delete_btn = QPushButton("Supprimer")
+        delete_btn.clicked.connect(self._on_delete_clicked)
+
+        buttons_row.addWidget(add_btn)
+        buttons_row.addWidget(rename_btn)
+        buttons_row.addWidget(shortcut_btn)
+        buttons_row.addWidget(delete_btn)
+
+        layout.addLayout(buttons_row)
+
+        self._suspend_signals = False
+
+        self.refresh()
+
+    def refresh(self) -> None:
+
+        self._suspend_signals = True
+
+        current_id = self._current_entry_id()
+
+        self.list_widget.clear()
+
+        for entry in event_config.state.event_types:
+
+            builtin_suffix = " [intégré]" if entry["is_builtin"] else ""
+            shortcut_suffix = f"  ({entry['shortcut']})" if entry["shortcut"] else ""
+
+            item = QListWidgetItem(
+                f"{entry['label']}{shortcut_suffix}{builtin_suffix}"
+            )
+            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+            item.setCheckState(
+                Qt.CheckState.Checked if entry["enabled"] else Qt.CheckState.Unchecked
+            )
+            item.setData(Qt.ItemDataRole.UserRole, entry["id"])
+            item.setData(Qt.ItemDataRole.UserRole + 1, entry["is_builtin"])
+
+            self.list_widget.addItem(item)
+
+            if entry["id"] == current_id:
+                self.list_widget.setCurrentItem(item)
+
+        self._suspend_signals = False
+
+    def _current_entry_id(self) -> Optional[int]:
+
+        item = self.list_widget.currentItem()
+
+        if item is None:
+            return None
+
+        return item.data(Qt.ItemDataRole.UserRole)
+
+    def _current_is_builtin(self) -> bool:
+
+        item = self.list_widget.currentItem()
+
+        if item is None:
+            return False
+
+        return bool(item.data(Qt.ItemDataRole.UserRole + 1))
+
+    def _on_item_changed(self, item: QListWidgetItem) -> None:
+
+        if self._suspend_signals:
+            return
+
+        entry_id = item.data(Qt.ItemDataRole.UserRole)
+        enabled = item.checkState() == Qt.CheckState.Checked
+
+        event_config.set_event_type_enabled(entry_id, enabled)
+
+    def _on_add_clicked(self) -> None:
+
+        label, ok = QInputDialog.getText(self, "Ajouter un événement", "Nom :")
+
+        if not ok or not label.strip():
+            return
+
+        shortcut, ok = QInputDialog.getText(
+            self,
+            "Raccourci clavier",
+            "Raccourci (ex: A, Shift+B, laisser vide si aucun) :",
+        )
+
+        if not ok:
+            shortcut = ""
+
+        event_config.add_event_type(label.strip(), shortcut.strip())
+
+    def _on_rename_clicked(self) -> None:
+
+        entry_id = self._current_entry_id()
+
+        if entry_id is None:
+            return
+
+        current_label = self.list_widget.currentItem().text().split("  (")[0].replace(
+            " [intégré]", ""
+        )
+
+        label, ok = QInputDialog.getText(
+            self, "Renommer", "Nouveau nom :", text=current_label
+        )
+
+        if not ok or not label.strip():
+            return
+
+        event_config.rename_event_type(entry_id, label.strip())
+
+    def _on_shortcut_clicked(self) -> None:
+
+        entry_id = self._current_entry_id()
+
+        if entry_id is None:
+            return
+
+        current_entry = next(
+            (e for e in event_config.state.event_types if e["id"] == entry_id),
+            None,
+        )
+        current_shortcut = current_entry["shortcut"] if current_entry else ""
+
+        shortcut, ok = QInputDialog.getText(
+            self,
+            "Raccourci clavier",
+            "Raccourci (ex: A, Shift+B, laisser vide pour aucun) :",
+            text=current_shortcut,
+        )
+
+        if not ok:
+            return
+
+        event_config.set_event_type_shortcut(entry_id, shortcut.strip())
+
+    def _on_delete_clicked(self) -> None:
+
+        entry_id = self._current_entry_id()
+
+        if entry_id is None:
+            return
+
+        if self._current_is_builtin():
+            QMessageBox.warning(
+                self,
+                "Impossible de supprimer",
+                "Cet événement est intégré à l'application et ne peut "
+                "pas être supprimé. Vous pouvez le désactiver à la place."
+            )
+            return
+
+        reply = QMessageBox.question(
+            self,
+            "Supprimer",
+            "Supprimer cet événement ? Les événements déjà enregistrés "
+            "conservent leur valeur actuelle ; seule la liste de choix "
+            "future est modifiée."
+        )
+
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+
+        event_config.delete_event_type(entry_id)
+
+
 class _FeatureFlagsWidget(QWidget):
     """Onglet à cases à cocher pour activer/désactiver des sections
     entières de la saisie (PhasePanel, popup de détails du tir, champs
@@ -205,7 +416,8 @@ class _FeatureFlagsWidget(QWidget):
         layout = QVBoxLayout(self)
 
         note = QLabel(
-            "Les champs indentés (→) ne s'appliquent que " \
+            "Réglages propres à ce poste (non partagés avec les autres "
+            "utilisateurs). Les champs indentés (→) ne s'appliquent que "
             "si le popup de détails du tir est lui-même activé ci-dessus."
         )
         note.setWordWrap(True)
@@ -258,6 +470,7 @@ class EventConfigDialog(QDialog):
         layout.addWidget(tabs)
 
         tabs.addTab(self._build_phases_tab(), "Phases & systèmes")
+        tabs.addTab(self._build_event_types_tab(), "Événements")
         tabs.addTab(self._build_action_types_tab(), "Types d'action")
         tabs.addTab(self._build_defense_levels_tab(), "Niveaux de défense")
         tabs.addTab(self._build_features_tab(), "Fonctionnalités")
@@ -340,6 +553,16 @@ class EventConfigDialog(QDialog):
         event_config.add_system(phase_id, name)
 
     # =====================================================
+    # Onglet Événements
+    # =====================================================
+
+    def _build_event_types_tab(self) -> QWidget:
+
+        self._event_types_widget = _EventTypesWidget()
+
+        return self._event_types_widget
+
+    # =====================================================
     # Onglet Types d'action
     # =====================================================
 
@@ -373,6 +596,10 @@ class EventConfigDialog(QDialog):
 
         return self._defense_levels_list
 
+    # =====================================================
+    # Onglet Fonctionnalités (préférences locales)
+    # =====================================================
+
     def _build_features_tab(self) -> QWidget:
 
         self._features_widget = _FeatureFlagsWidget()
@@ -387,6 +614,7 @@ class EventConfigDialog(QDialog):
 
         self._phases_list.refresh()
         self._systems_list.refresh()
+        self._event_types_widget.refresh()
         self._action_types_list.refresh()
         self._defense_levels_list.refresh()
         self._features_widget.refresh()

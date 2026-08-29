@@ -1,36 +1,25 @@
 from __future__ import annotations
 
-from typing import List, Optional, Tuple
+from typing import Optional
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QGridLayout,
     QPushButton,
     QWidget
 )
 
-
-EVENT_TYPES: List[Tuple[str, str, str]] = [
-
-    ("FT_MADE", "LF+", "E"),
-    ("FT_MISSED", "LF-", "Shift+E"),
-
-    ("OFF_REBOUND", "RO", "Shift+Q"),
-    ("DEF_REBOUND", "RD", "Q"),
-
-    ("ASSIST", "AST", "S"),
-    ("TURNOVER", "TO", "D"),
-
-    ("STEAL", "STL", "W"),
-    ("BLOCK", "BLK", "X"),
-
-    ("FOUL", "FAUTE", "C"),
-]
-
+from data.event_config import event_config
 
 
 class EventPanel(QWidget):
+    """Panneau de boutons pour les événements classiques (LF+, Rebonds,
+    Passe décisive, Perte de balle, Interception, Contre, Faute...).
+
+    La liste des événements affichés (libellé, raccourci indiqué sur le
+    bouton) vient de la configuration personnalisable (data.event_config),
+    modifiable depuis le menu Affichage > Configuration des événements. Le
+    panneau se reconstruit automatiquement à chaque modification."""
 
     event_triggered = Signal(str)
 
@@ -43,38 +32,48 @@ class EventPanel(QWidget):
 
         super().__init__(parent)
 
+        self._columns = columns
 
-        self._shortcuts = []
+        self._layout = QGridLayout(self)
 
+        event_config.changed.connect(self._rebuild)
 
-        layout = QGridLayout(
-            self
-        )
+        self._rebuild()
 
+    def _rebuild(self) -> None:
 
-        for index, (
-            code,
-            label,
-            shortcut
-        ) in enumerate(EVENT_TYPES):
+        while self._layout.count():
 
+            item = self._layout.takeAt(0)
 
-            button = QPushButton(
-                f"{label}\n[{shortcut}]",
-                self
+            widget = item.widget()
+
+            if widget:
+                widget.deleteLater()
+
+        for index, (code, label, shortcut) in enumerate(
+            event_config.active_event_types()
+        ):
+
+            button_text = (
+                f"{label}\n[{shortcut}]"
+                if shortcut
+                else label
             )
 
+            button = QPushButton(
+                button_text,
+                self
+            )
 
             button.setMinimumHeight(
                 50
             )
 
-
             # Empêche le bouton de voler le focus au clavier
             button.setFocusPolicy(
                 Qt.FocusPolicy.NoFocus
             )
-
 
             button.clicked.connect(
                 lambda checked=False,
@@ -82,14 +81,12 @@ class EventPanel(QWidget):
                 self.event_triggered.emit(c)
             )
 
-
             row, col = divmod(
                 index,
-                columns
+                self._columns
             )
 
-
-            layout.addWidget(
+            self._layout.addWidget(
                 button,
                 row,
                 col

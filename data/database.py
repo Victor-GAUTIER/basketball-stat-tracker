@@ -1,38 +1,19 @@
 """Couche d'accès à la base de données SQLite.
 
 Toute l'interaction avec SQLite est centralisée ici : création du schéma,
-opérations CRUD sur les équipes, joueurs, matchs et événements. Le reste de
+opérations CRUD sur les équipes, joueurs, matchs, événements, et la
+configuration personnalisable des événements (phases, systèmes, types
+d'action, niveaux de défense, événements classiques). Le reste de
 l'application ne doit jamais exécuter de requêtes SQL directement, mais
 passer par les méthodes de la classe Database.
 """
 
 from __future__ import annotations
 
-import os
-import sys
 import sqlite3
 from typing import Dict, List, Optional, Tuple
 
 from data.models import Event, Game, Player, Team
-
-
-def get_default_db_path() -> str:
-    """Retourne un chemin fixe et propre à l'utilisateur pour la base de
-    données, indépendant du dossier depuis lequel l'app est lancée."""
-
-    app_name = "BasketballStatTracker"
-
-    if sys.platform == "win32":
-        base_dir = os.environ.get("LOCALAPPDATA", os.path.expanduser("~"))
-    elif sys.platform == "darwin":
-        base_dir = os.path.expanduser("~/Library/Application Support")
-    else:
-        base_dir = os.path.expanduser("~/.local/share")
-
-    app_dir = os.path.join(base_dir, app_name)
-    os.makedirs(app_dir, exist_ok=True)
-
-    return os.path.join(app_dir, "basketball_stats.db")
 
 
 # Couleur par défaut attribuée à une équipe qui n'en a pas encore choisi une
@@ -131,14 +112,24 @@ CREATE TABLE IF NOT EXISTS event_defense_levels (
     enabled    INTEGER NOT NULL DEFAULT 1,
     sort_order INTEGER NOT NULL DEFAULT 0
 );
+
+CREATE TABLE IF NOT EXISTS event_types (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    code       TEXT NOT NULL UNIQUE,
+    label      TEXT NOT NULL,
+    shortcut   TEXT,
+    enabled    INTEGER NOT NULL DEFAULT 1,
+    is_builtin INTEGER NOT NULL DEFAULT 0,
+    sort_order INTEGER NOT NULL DEFAULT 0
+);
 """
 
 
 class Database:
     """Gère la connexion SQLite et toutes les opérations CRUD de l'application."""
 
-    def __init__(self, db_path: Optional[str] = None) -> None:
-        self.db_path = db_path or get_default_db_path()
+    def __init__(self, db_path: str = "basketball_stats.db") -> None:
+        self.db_path = db_path
         self._connection: Optional[sqlite3.Connection] = None
         self._connect()
         self._create_schema()
@@ -194,6 +185,20 @@ class Database:
             )
             self._connection.commit()
 
+        if "home_attacks_right" not in {
+            row["name"]
+            for row in self._connection.execute(
+                "PRAGMA table_info(games)"
+            ).fetchall()
+        }:
+            # 1 = l'équipe domicile attaque à droite en 1re mi-temps
+            # (valeur par défaut historique). NULL est traité comme 1
+            # pour les matchs enregistrés avant l'ajout de cette colonne.
+            self._connection.execute(
+                "ALTER TABLE games ADD COLUMN home_attacks_right INTEGER"
+            )
+            self._connection.commit()
+
         cur = self._connection.execute("PRAGMA table_info(game_players)")
         existing_game_player_columns = {row["name"] for row in cur.fetchall()}
 
@@ -203,6 +208,12 @@ class Database:
             )
             self._connection.commit()
 
+        # Migration : les anciens événements stockaient un code interne
+        # pour le niveau de défense (OUVERT, PEU_DEFENDU, TRES_DEFENDU) ;
+        # on les convertit vers le libellé lisible désormais utilisé
+        # partout, cohérent avec le système de configuration des
+        # événements (qui ne distingue plus code et libellé pour la
+        # défense).
         _defense_code_to_label = {
             "OUVERT": "Ouvert",
             "PEU_DEFENDU": "Un peu défendu",
@@ -226,6 +237,60 @@ class Database:
             "ON players (team_id, name)"
         )
         self._connection.commit()
+
+    def _seed_event_config(self) -> None:
+        """Peuple les tables de configuration des événements avec les
+        valeurs historiques codées en dur, uniquement si elles sont vides
+        (première utilisation, ou base créée avant l'ajout de cette
+        fonctionnalité)."""
+
+        from data.event_config import (
+            DEFAULT_ACTION_TYPES,
+            DEFAULT_DEFENSE_LEVELS,
+            DEFAULT_EVENT_TYPES,
+            DEFAULT_PHASES,
+        )
+
+        cur = self.connection.execute("SELECT COUNT(*) AS n FROM event_phases")
+        if cur.fetchone()["n"] == 0:
+
+            for order, (phase_name, systems) in enumerate(DEFAULT_PHASES.items()):
+                cur = self.connection.execute(
+                    "INSERT INTO event_phases (name, sort_order) VALUES (?, ?)",
+                    (phase_name, order),
+                )
+                phase_id = cur.lastrowid
+                for s_order, system_name in enumerate(systems):
+                    self.connection.execute(
+                        "INSERT INTO event_systems (phase_id, name, sort_order) "
+                        "VALUES (?, ?, ?)",
+                        (phase_id, system_name, s_order),
+                    )
+
+            for order, name in enumerate(DEFAULT_ACTION_TYPES):
+                self.connection.execute(
+                    "INSERT INTO event_action_types (name, sort_order) VALUES (?, ?)",
+                    (name, order),
+                )
+
+            for order, name in enumerate(DEFAULT_DEFENSE_LEVELS):
+                self.connection.execute(
+                    "INSERT INTO event_defense_levels (name, sort_order) VALUES (?, ?)",
+                    (name, order),
+                )
+
+            self.connection.commit()
+
+        cur = self.connection.execute("SELECT COUNT(*) AS n FROM event_types")
+        if cur.fetchone()["n"] == 0:
+            for order, (code, label, shortcut) in enumerate(DEFAULT_EVENT_TYPES):
+                self.connection.execute(
+                    "INSERT INTO event_types "
+                    "(code, label, shortcut, is_builtin, sort_order) "
+                    "VALUES (?, ?, ?, 1, ?)",
+                    (code, label, shortcut, order),
+                )
+            self.connection.commit()
 
     @property
     def connection(self) -> sqlite3.Connection:
@@ -315,10 +380,7 @@ class Database:
         L'identité d'une joueuse est définie par son ÉQUIPE et son NOM, et
         non plus par son numéro de maillot : le numéro peut changer d'un
         match (voire d'une saison) à l'autre, alors que le nom, lui, reste
-        stable. Se baser sur le numéro exposait à un bug sérieux : créer
-        une nouvelle joueuse avec le numéro d'une joueuse déjà existante
-        renommait silencieusement cette dernière (même id, donc même
-        historique de stats) au lieu de créer une entrée distincte.
+        stable.
 
         Si une joueuse portant ce nom existe déjà dans cette équipe, son
         numéro est mis à jour (au cas où il aurait changé) et son id est
@@ -500,9 +562,6 @@ class Database:
         `numbers`, optionnel, associe player_id -> numéro de maillot propre
         à CE match ; une joueuse absente de ce dict garde le numéro par
         défaut de son équipe (voir get_game_players).
-
-        À utiliser depuis l'écran de création/édition de match, une fois que
-        l'utilisateur a coché les joueuses présentes des deux équipes.
         """
         numbers = numbers or {}
 
@@ -562,210 +621,22 @@ class Database:
         ]
 
     # ------------------------------------------------------------------
-    # Configuration des événements (phases, systèmes, types d'action,
-    # niveaux de défense) — voir data.event_config
+    # Orientation du terrain par match
     # ------------------------------------------------------------------
 
-    def _seed_event_config(self) -> None:
-        """Peuple les tables de configuration avec les valeurs
-        historiques codées en dur, uniquement si elles sont vides
-        (première utilisation, ou base créée avant l'ajout de cette
-        fonctionnalité)."""
-
-        from data.event_config import (
-            DEFAULT_ACTION_TYPES,
-            DEFAULT_DEFENSE_LEVELS,
-            DEFAULT_PHASES,
-        )
-
-        cur = self.connection.execute("SELECT COUNT(*) AS n FROM event_phases")
-        if cur.fetchone()["n"] > 0:
-            return
-
-        for order, (phase_name, systems) in enumerate(DEFAULT_PHASES.items()):
-            cur = self.connection.execute(
-                "INSERT INTO event_phases (name, sort_order) VALUES (?, ?)",
-                (phase_name, order),
-            )
-            phase_id = cur.lastrowid
-            for s_order, system_name in enumerate(systems):
-                self.connection.execute(
-                    "INSERT INTO event_systems (phase_id, name, sort_order) "
-                    "VALUES (?, ?, ?)",
-                    (phase_id, system_name, s_order),
-                )
-
-        for order, name in enumerate(DEFAULT_ACTION_TYPES):
-            self.connection.execute(
-                "INSERT INTO event_action_types (name, sort_order) VALUES (?, ?)",
-                (name, order),
-            )
-
-        for order, name in enumerate(DEFAULT_DEFENSE_LEVELS):
-            self.connection.execute(
-                "INSERT INTO event_defense_levels (name, sort_order) VALUES (?, ?)",
-                (name, order),
-            )
-
-        self.connection.commit()
-
-    def get_event_config_state(self):
-
-        from data.event_config import ConfigEntry, EventConfigState
-
-        phases_rows = self.connection.execute(
-            "SELECT id, name, enabled FROM event_phases ORDER BY sort_order, name"
-        ).fetchall()
-        phases = [
-            ConfigEntry(id=r["id"], name=r["name"], enabled=bool(r["enabled"]))
-            for r in phases_rows
-        ]
-
-        systems_by_phase = {}
-        for phase in phases:
-            rows = self.connection.execute(
-                "SELECT id, name, enabled FROM event_systems "
-                "WHERE phase_id = ? ORDER BY sort_order, name",
-                (phase.id,),
-            ).fetchall()
-            systems_by_phase[phase.id] = [
-                ConfigEntry(id=r["id"], name=r["name"], enabled=bool(r["enabled"]))
-                for r in rows
-            ]
-
-        action_rows = self.connection.execute(
-            "SELECT id, name, enabled FROM event_action_types ORDER BY sort_order, name"
-        ).fetchall()
-        action_types = [
-            ConfigEntry(id=r["id"], name=r["name"], enabled=bool(r["enabled"]))
-            for r in action_rows
-        ]
-
-        defense_rows = self.connection.execute(
-            "SELECT id, name, enabled FROM event_defense_levels ORDER BY sort_order, name"
-        ).fetchall()
-        defense_levels = [
-            ConfigEntry(id=r["id"], name=r["name"], enabled=bool(r["enabled"]))
-            for r in defense_rows
-        ]
-
-        return EventConfigState(
-            phases=phases,
-            systems_by_phase=systems_by_phase,
-            action_types=action_types,
-            defense_levels=defense_levels,
-        )
-
-    # -- Phases --
-
-    def add_event_phase(self, name: str) -> int:
+    def get_home_attacks_right(self, game_id: int) -> bool:
         cur = self.connection.execute(
-            "INSERT INTO event_phases (name, sort_order) VALUES (?, "
-            "(SELECT COALESCE(MAX(sort_order), -1) + 1 FROM event_phases))",
-            (name,),
+            "SELECT home_attacks_right FROM games WHERE id = ?", (game_id,)
         )
-        self.connection.commit()
-        return int(cur.lastrowid)
+        row = cur.fetchone()
+        if row is None or row["home_attacks_right"] is None:
+            return True
+        return bool(row["home_attacks_right"])
 
-    def rename_event_phase(self, phase_id: int, name: str) -> None:
+    def set_home_attacks_right(self, game_id: int, home_attacks_right: bool) -> None:
         self.connection.execute(
-            "UPDATE event_phases SET name = ? WHERE id = ?", (name, phase_id)
-        )
-        self.connection.commit()
-
-    def set_event_phase_enabled(self, phase_id: int, enabled: bool) -> None:
-        self.connection.execute(
-            "UPDATE event_phases SET enabled = ? WHERE id = ?", (int(enabled), phase_id)
-        )
-        self.connection.commit()
-
-    def delete_event_phase(self, phase_id: int) -> None:
-        self.connection.execute("DELETE FROM event_phases WHERE id = ?", (phase_id,))
-        self.connection.commit()
-
-    # -- Systèmes --
-
-    def add_event_system(self, phase_id: int, name: str) -> int:
-        cur = self.connection.execute(
-            "INSERT INTO event_systems (phase_id, name, sort_order) VALUES (?, ?, "
-            "(SELECT COALESCE(MAX(sort_order), -1) + 1 FROM event_systems "
-            "WHERE phase_id = ?))",
-            (phase_id, name, phase_id),
-        )
-        self.connection.commit()
-        return int(cur.lastrowid)
-
-    def rename_event_system(self, system_id: int, name: str) -> None:
-        self.connection.execute(
-            "UPDATE event_systems SET name = ? WHERE id = ?", (name, system_id)
-        )
-        self.connection.commit()
-
-    def set_event_system_enabled(self, system_id: int, enabled: bool) -> None:
-        self.connection.execute(
-            "UPDATE event_systems SET enabled = ? WHERE id = ?", (int(enabled), system_id)
-        )
-        self.connection.commit()
-
-    def delete_event_system(self, system_id: int) -> None:
-        self.connection.execute("DELETE FROM event_systems WHERE id = ?", (system_id,))
-        self.connection.commit()
-
-    # -- Types d'action --
-
-    def add_event_action_type(self, name: str) -> int:
-        cur = self.connection.execute(
-            "INSERT INTO event_action_types (name, sort_order) VALUES (?, "
-            "(SELECT COALESCE(MAX(sort_order), -1) + 1 FROM event_action_types))",
-            (name,),
-        )
-        self.connection.commit()
-        return int(cur.lastrowid)
-
-    def rename_event_action_type(self, entry_id: int, name: str) -> None:
-        self.connection.execute(
-            "UPDATE event_action_types SET name = ? WHERE id = ?", (name, entry_id)
-        )
-        self.connection.commit()
-
-    def set_event_action_type_enabled(self, entry_id: int, enabled: bool) -> None:
-        self.connection.execute(
-            "UPDATE event_action_types SET enabled = ? WHERE id = ?",
-            (int(enabled), entry_id),
-        )
-        self.connection.commit()
-
-    def delete_event_action_type(self, entry_id: int) -> None:
-        self.connection.execute("DELETE FROM event_action_types WHERE id = ?", (entry_id,))
-        self.connection.commit()
-
-    # -- Niveaux de défense --
-
-    def add_event_defense_level(self, name: str) -> int:
-        cur = self.connection.execute(
-            "INSERT INTO event_defense_levels (name, sort_order) VALUES (?, "
-            "(SELECT COALESCE(MAX(sort_order), -1) + 1 FROM event_defense_levels))",
-            (name,),
-        )
-        self.connection.commit()
-        return int(cur.lastrowid)
-
-    def rename_event_defense_level(self, entry_id: int, name: str) -> None:
-        self.connection.execute(
-            "UPDATE event_defense_levels SET name = ? WHERE id = ?", (name, entry_id)
-        )
-        self.connection.commit()
-
-    def set_event_defense_level_enabled(self, entry_id: int, enabled: bool) -> None:
-        self.connection.execute(
-            "UPDATE event_defense_levels SET enabled = ? WHERE id = ?",
-            (int(enabled), entry_id),
-        )
-        self.connection.commit()
-
-    def delete_event_defense_level(self, entry_id: int) -> None:
-        self.connection.execute(
-            "DELETE FROM event_defense_levels WHERE id = ?", (entry_id,)
+            "UPDATE games SET home_attacks_right = ? WHERE id = ?",
+            (int(home_attacks_right), game_id),
         )
         self.connection.commit()
 
@@ -985,5 +856,246 @@ class Database:
         self.connection.execute(
             "UPDATE game_teams SET is_home = 1 - is_home WHERE game_id = ?",
             (game_id,),
+        )
+        self.connection.commit()
+
+    # ------------------------------------------------------------------
+    # Configuration des événements (phases, systèmes, types d'action,
+    # niveaux de défense, événements classiques) — voir data.event_config
+    # ------------------------------------------------------------------
+
+    def get_event_config_state(self):
+
+        from data.event_config import ConfigEntry, EventConfigState
+
+        phases_rows = self.connection.execute(
+            "SELECT id, name, enabled FROM event_phases ORDER BY sort_order, name"
+        ).fetchall()
+        phases = [
+            ConfigEntry(id=r["id"], name=r["name"], enabled=bool(r["enabled"]))
+            for r in phases_rows
+        ]
+
+        systems_by_phase = {}
+        for phase in phases:
+            rows = self.connection.execute(
+                "SELECT id, name, enabled FROM event_systems "
+                "WHERE phase_id = ? ORDER BY sort_order, name",
+                (phase.id,),
+            ).fetchall()
+            systems_by_phase[phase.id] = [
+                ConfigEntry(id=r["id"], name=r["name"], enabled=bool(r["enabled"]))
+                for r in rows
+            ]
+
+        action_rows = self.connection.execute(
+            "SELECT id, name, enabled FROM event_action_types ORDER BY sort_order, name"
+        ).fetchall()
+        action_types = [
+            ConfigEntry(id=r["id"], name=r["name"], enabled=bool(r["enabled"]))
+            for r in action_rows
+        ]
+
+        defense_rows = self.connection.execute(
+            "SELECT id, name, enabled FROM event_defense_levels ORDER BY sort_order, name"
+        ).fetchall()
+        defense_levels = [
+            ConfigEntry(id=r["id"], name=r["name"], enabled=bool(r["enabled"]))
+            for r in defense_rows
+        ]
+
+        event_types = self.get_event_types()
+
+        return EventConfigState(
+            phases=phases,
+            systems_by_phase=systems_by_phase,
+            action_types=action_types,
+            defense_levels=defense_levels,
+            event_types=event_types,
+        )
+
+    # -- Phases --
+
+    def add_event_phase(self, name: str) -> int:
+        cur = self.connection.execute(
+            "INSERT INTO event_phases (name, sort_order) VALUES (?, "
+            "(SELECT COALESCE(MAX(sort_order), -1) + 1 FROM event_phases))",
+            (name,),
+        )
+        self.connection.commit()
+        return int(cur.lastrowid)
+
+    def rename_event_phase(self, phase_id: int, name: str) -> None:
+        self.connection.execute(
+            "UPDATE event_phases SET name = ? WHERE id = ?", (name, phase_id)
+        )
+        self.connection.commit()
+
+    def set_event_phase_enabled(self, phase_id: int, enabled: bool) -> None:
+        self.connection.execute(
+            "UPDATE event_phases SET enabled = ? WHERE id = ?", (int(enabled), phase_id)
+        )
+        self.connection.commit()
+
+    def delete_event_phase(self, phase_id: int) -> None:
+        self.connection.execute("DELETE FROM event_phases WHERE id = ?", (phase_id,))
+        self.connection.commit()
+
+    # -- Systèmes --
+
+    def add_event_system(self, phase_id: int, name: str) -> int:
+        cur = self.connection.execute(
+            "INSERT INTO event_systems (phase_id, name, sort_order) VALUES (?, ?, "
+            "(SELECT COALESCE(MAX(sort_order), -1) + 1 FROM event_systems "
+            "WHERE phase_id = ?))",
+            (phase_id, name, phase_id),
+        )
+        self.connection.commit()
+        return int(cur.lastrowid)
+
+    def rename_event_system(self, system_id: int, name: str) -> None:
+        self.connection.execute(
+            "UPDATE event_systems SET name = ? WHERE id = ?", (name, system_id)
+        )
+        self.connection.commit()
+
+    def set_event_system_enabled(self, system_id: int, enabled: bool) -> None:
+        self.connection.execute(
+            "UPDATE event_systems SET enabled = ? WHERE id = ?", (int(enabled), system_id)
+        )
+        self.connection.commit()
+
+    def delete_event_system(self, system_id: int) -> None:
+        self.connection.execute("DELETE FROM event_systems WHERE id = ?", (system_id,))
+        self.connection.commit()
+
+    # -- Types d'action --
+
+    def add_event_action_type(self, name: str) -> int:
+        cur = self.connection.execute(
+            "INSERT INTO event_action_types (name, sort_order) VALUES (?, "
+            "(SELECT COALESCE(MAX(sort_order), -1) + 1 FROM event_action_types))",
+            (name,),
+        )
+        self.connection.commit()
+        return int(cur.lastrowid)
+
+    def rename_event_action_type(self, entry_id: int, name: str) -> None:
+        self.connection.execute(
+            "UPDATE event_action_types SET name = ? WHERE id = ?", (name, entry_id)
+        )
+        self.connection.commit()
+
+    def set_event_action_type_enabled(self, entry_id: int, enabled: bool) -> None:
+        self.connection.execute(
+            "UPDATE event_action_types SET enabled = ? WHERE id = ?",
+            (int(enabled), entry_id),
+        )
+        self.connection.commit()
+
+    def delete_event_action_type(self, entry_id: int) -> None:
+        self.connection.execute("DELETE FROM event_action_types WHERE id = ?", (entry_id,))
+        self.connection.commit()
+
+    # -- Niveaux de défense --
+
+    def add_event_defense_level(self, name: str) -> int:
+        cur = self.connection.execute(
+            "INSERT INTO event_defense_levels (name, sort_order) VALUES (?, "
+            "(SELECT COALESCE(MAX(sort_order), -1) + 1 FROM event_defense_levels))",
+            (name,),
+        )
+        self.connection.commit()
+        return int(cur.lastrowid)
+
+    def rename_event_defense_level(self, entry_id: int, name: str) -> None:
+        self.connection.execute(
+            "UPDATE event_defense_levels SET name = ? WHERE id = ?", (name, entry_id)
+        )
+        self.connection.commit()
+
+    def set_event_defense_level_enabled(self, entry_id: int, enabled: bool) -> None:
+        self.connection.execute(
+            "UPDATE event_defense_levels SET enabled = ? WHERE id = ?",
+            (int(enabled), entry_id),
+        )
+        self.connection.commit()
+
+    def delete_event_defense_level(self, entry_id: int) -> None:
+        self.connection.execute(
+            "DELETE FROM event_defense_levels WHERE id = ?", (entry_id,)
+        )
+        self.connection.commit()
+
+    # -- Types d'événements classiques (LF+, Rebonds, Passe déc., etc.) --
+
+    def get_event_types(self) -> list:
+        rows = self.connection.execute(
+            "SELECT id, code, label, shortcut, enabled, is_builtin "
+            "FROM event_types ORDER BY sort_order, label"
+        ).fetchall()
+        return [
+            {
+                "id": r["id"],
+                "code": r["code"],
+                "label": r["label"],
+                "shortcut": r["shortcut"] or "",
+                "enabled": bool(r["enabled"]),
+                "is_builtin": bool(r["is_builtin"]),
+            }
+            for r in rows
+        ]
+
+    def add_event_type(self, label: str, shortcut: str = "") -> int:
+        """Crée un événement personnalisé (non intégré, donc supprimable
+        plus tard). Le code interne est généré automatiquement à partir
+        de l'id, pour rester stable même si le libellé est ensuite
+        renommé."""
+
+        cur = self.connection.execute(
+            "INSERT INTO event_types (code, label, shortcut, sort_order) "
+            "VALUES ('', ?, ?, "
+            "(SELECT COALESCE(MAX(sort_order), -1) + 1 FROM event_types))",
+            (label, shortcut),
+        )
+        new_id = int(cur.lastrowid)
+
+        self.connection.execute(
+            "UPDATE event_types SET code = ? WHERE id = ?",
+            (f"CUSTOM_{new_id}", new_id),
+        )
+        self.connection.commit()
+
+        return new_id
+
+    def rename_event_type_label(self, entry_id: int, label: str) -> None:
+        self.connection.execute(
+            "UPDATE event_types SET label = ? WHERE id = ?", (label, entry_id)
+        )
+        self.connection.commit()
+
+    def set_event_type_shortcut(self, entry_id: int, shortcut: str) -> None:
+        self.connection.execute(
+            "UPDATE event_types SET shortcut = ? WHERE id = ?",
+            (shortcut, entry_id),
+        )
+        self.connection.commit()
+
+    def set_event_type_enabled(self, entry_id: int, enabled: bool) -> None:
+        self.connection.execute(
+            "UPDATE event_types SET enabled = ? WHERE id = ?",
+            (int(enabled), entry_id),
+        )
+        self.connection.commit()
+
+    def delete_event_type(self, entry_id: int) -> None:
+        """Ne supprime que les événements NON intégrés (is_builtin = 0) :
+        les événements historiques restent protégés contre la
+        suppression, seulement désactivables, car certains déclenchent
+        une logique spécifique (TURNOVER, FT_MADE, FT_MISSED)."""
+
+        self.connection.execute(
+            "DELETE FROM event_types WHERE id = ? AND is_builtin = 0",
+            (entry_id,),
         )
         self.connection.commit()

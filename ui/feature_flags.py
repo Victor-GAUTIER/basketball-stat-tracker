@@ -1,11 +1,11 @@
 """Flags de fonctionnalités optionnelles de la saisie (afficher/masquer
 PhasePanel, le popup de détails du tir, ou certains de ses champs).
 
-Contrairement aux phases/systèmes/types d'action (partagés entre tous les
-utilisateurs via la base de données, car ils affectent la cohérence des
-statistiques collectées), ces réglages sont des préférences d'affichage
-locales à chaque poste, gérées comme le thème sombre/clair (voir
-ui.theme) via QSettings plutôt qu'en base.
+Contrairement aux phases/systèmes/types d'action/événements (partagés
+entre tous les utilisateurs via la base de données, car ils affectent la
+cohérence des statistiques collectées), ces réglages sont des préférences
+d'affichage locales à chaque poste, gérées comme le thème sombre/clair
+(voir ui.theme) via QSettings plutôt qu'en base.
 """
 
 from __future__ import annotations

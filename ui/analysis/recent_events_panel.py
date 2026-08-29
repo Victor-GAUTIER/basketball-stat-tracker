@@ -12,10 +12,7 @@ from typing import Dict, List, Optional
 from PySide6.QtWidgets import QHeaderView, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget
 
 from data.models import Event, Player
-from ui.analysis.event_panel import EVENT_TYPES
-
-# Dictionnaire code interne -> libellé lisible, construit une fois pour toutes.
-_EVENT_LABELS: Dict[str, str] = {code: label for code, label, _shortcut in EVENT_TYPES}
+from ui.analysis.event_labels import event_label as get_event_label
 
 
 def _format_timestamp(seconds: float) -> str:
@@ -53,9 +50,9 @@ class RecentEventsPanel(QWidget):
         for row, event in enumerate(recent_events):
             player = players_by_id.get(event.player_id)
             player_label = f"#{player.number} {player.name}" if player else "?"
-            event_label = _EVENT_LABELS.get(event.event_type, event.event_type)
+            label_text = get_event_label(event.event_type)
 
             self.table.setItem(row, 0, QTableWidgetItem(_format_timestamp(event.timestamp)))
             self.table.setItem(row, 1, QTableWidgetItem(str(event.quarter)))
             self.table.setItem(row, 2, QTableWidgetItem(player_label))
-            self.table.setItem(row, 3, QTableWidgetItem(event_label))
+            self.table.setItem(row, 3, QTableWidgetItem(label_text))

@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
 from controller.analysis_controller import AnalysisController
 
 from data.database import Database
+from data.event_config import event_config
 from data.models import Player
 
 from export.csv_export import export_events_to_csv
@@ -33,7 +34,7 @@ from export.video_export import VideoExportWorker
 
 from ui.analysis.video_panel import VideoPanel
 from ui.analysis.player_panel import PlayerPanel
-from ui.analysis.event_panel import EventPanel, EVENT_TYPES
+from ui.analysis.event_panel import EventPanel
 from ui.analysis.stats_panel import StatsPanel
 from ui.analysis.shot_chart_widget import ShotChartWidget
 from ui.analysis.play_by_play_panel import PlayByPlayPanel
@@ -44,7 +45,7 @@ from ui.analysis.team_comparison_panel import TeamComparisonPanel
 from ui.analysis.turnover_dialog import TurnoverTypeDialog
 from ui.analysis.shot_details_dialog import ShotDetailsDialog
 from ui.utils import resource_path
-from ui.theme import THEME_DARK, THEME_LIGHT, apply_theme, get_theme_setting, set_theme_setting
+from ui.theme import THEME_DARK, THEME_LIGHT, apply_theme, get_court_asset_name, get_theme_setting, set_theme_setting
 from ui.event_config_dialog import EventConfigDialog
 from ui.feature_flags import feature_flags
 
@@ -104,6 +105,7 @@ class AnalysisWindow(QMainWindow):
         self.home_attacks_right = True
 
         self._shortcuts = []
+        self._event_shortcuts = []
 
         # Équipe actuellement "active" pour la sélection rapide de joueuse
         # au clavier (touche @ pour basculer, voir _register_shortcuts).
@@ -608,8 +610,6 @@ class AnalysisWindow(QMainWindow):
         # ONGLET SHOT CHART
         # =========================
 
-        from ui.theme import get_court_asset_name
-
         self.shot_chart_summary_panel = ShotChartSummaryPanel(
             resource_path(f"assets/{get_court_asset_name()}"),
             self
@@ -669,6 +669,12 @@ class AnalysisWindow(QMainWindow):
 
         self.playbyplay_panel.bulk_quarter_edit_requested.connect(
             self._on_bulk_quarter_edit
+        )
+
+    def _on_feature_flags_changed(self) -> None:
+
+        self.phase_panel.setVisible(
+            feature_flags.is_phase_panel_enabled()
         )
 
     # =====================================================
@@ -852,6 +858,10 @@ class AnalysisWindow(QMainWindow):
             self
         )
 
+        # macOS déplace automatiquement vers le menu Application toute
+        # QAction dont le texte contient un mot comme "Configuration",
+        # "Preferences", "Settings"... (heuristique de rôle système). On
+        # force explicitement NoRole pour que l'action reste dans ce menu.
         event_config_action.setMenuRole(
             QAction.MenuRole.NoRole
         )
@@ -875,12 +885,6 @@ class AnalysisWindow(QMainWindow):
 
         dialog = EventConfigDialog(self)
         dialog.exec()
-
-    def _on_feature_flags_changed(self) -> None:
-
-        self.phase_panel.setVisible(
-            feature_flags.is_phase_panel_enabled()
-        )
 
     def _change_quarter(
         self,
@@ -916,6 +920,10 @@ class AnalysisWindow(QMainWindow):
 
         self.home_attacks_right = not self.home_attacks_right
 
+        self.database.set_home_attacks_right(
+            self.controller.game_id,
+            self.home_attacks_right,
+        )
 
         self._update_shot_chart_orientation()
 
@@ -1364,18 +1372,6 @@ class AnalysisWindow(QMainWindow):
             ],
 
 
-            *[
-                (
-                    key,
-                    lambda c=code:
-                    self._on_event_triggered(c)
-                )
-
-                for code, label, key
-                in EVENT_TYPES
-            ],
-
-
         ]
 
 
@@ -1400,6 +1396,52 @@ class AnalysisWindow(QMainWindow):
 
 
             self._shortcuts.append(
+                shortcut
+            )
+
+
+        self._rebuild_event_shortcuts()
+
+        event_config.changed.connect(
+            self._rebuild_event_shortcuts
+        )
+
+
+    def _rebuild_event_shortcuts(self):
+        """(Re)crée les raccourcis clavier des événements classiques
+        (LF+, Rebonds, etc.) à partir de la configuration active. Appelé
+        au démarrage et à chaque modification de cette configuration
+        (ajout, suppression, changement de raccourci, activation/
+        désactivation)."""
+
+        for shortcut in self._event_shortcuts:
+
+            shortcut.setEnabled(False)
+
+            shortcut.deleteLater()
+
+        self._event_shortcuts = []
+
+        for code, label, key in event_config.active_event_types():
+
+            if not key:
+                continue
+
+            shortcut = QShortcut(
+                QKeySequence(key),
+                self
+            )
+
+            shortcut.setContext(
+                Qt.ShortcutContext.WindowShortcut
+            )
+
+            shortcut.activated.connect(
+                lambda c=code:
+                self._on_event_triggered(c)
+            )
+
+            self._event_shortcuts.append(
                 shortcut
             )
 
@@ -1544,17 +1586,13 @@ class AnalysisWindow(QMainWindow):
 
         """
         Retourne le libellé lisible d'un code événement classique
-        (ex: "REB", "FAUTE", ...), défini dans EVENT_TYPES.
+        (ex: "REB", "FAUTE", ...), depuis la configuration
+        personnalisable des événements (voir data.event_config).
         """
 
-        for code, label, key in EVENT_TYPES:
+        from ui.analysis.event_labels import event_label
 
-            if code == event_code:
-
-                return label
-
-
-        return event_code
+        return event_label(event_code)
 
 
 
@@ -1578,6 +1616,10 @@ class AnalysisWindow(QMainWindow):
             return
 
         self.video_path = game.video_path
+
+        self.home_attacks_right = self.database.get_home_attacks_right(
+            self.controller.game_id
+        )
 
         self.video_panel.load_video(
             game.video_path
@@ -1616,11 +1658,6 @@ class AnalysisWindow(QMainWindow):
         )
 
 
-
-        # Sauvegarde des équipes
-        self.home_team = home
-
-        self.away_team = away
 
         # Sauvegarde des équipes
         self.home_team = home
@@ -1788,6 +1825,8 @@ class AnalysisWindow(QMainWindow):
         # au type d'action et au rebond offensif préalable (la défense et
         # les dribbles n'ont pas de sens pour un lancer franc). Annuler le
         # popup annule tout l'événement, comme pour une perte de balle.
+        # Le popup peut être entièrement désactivé (voir ui.feature_flags),
+        # auquel cas l'événement est enregistré sans détails.
         action_type = None
         prior_oreb = None
 
@@ -1974,9 +2013,9 @@ class AnalysisWindow(QMainWindow):
 
         # -------------------------
         # Détails du tir (type d'action, défense, rebond off. préalable,
-        # dribbles) : popup dédié, qui remplace l'ancienne ligne de
-        # boutons "Type d'action" de PhasePanel. Annuler le popup annule
-        # l'enregistrement du tir (même logique que TurnoverTypeDialog).
+        # dribbles) : popup dédié, entièrement désactivable (voir
+        # ui.feature_flags). Annuler le popup annule l'enregistrement du
+        # tir (même logique que TurnoverTypeDialog).
         # -------------------------
 
         if feature_flags.is_shot_details_dialog_enabled():
