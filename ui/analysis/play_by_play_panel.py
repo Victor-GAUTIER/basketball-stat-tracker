@@ -12,12 +12,14 @@ from PySide6.QtWidgets import (
     QInputDialog,
     QLabel,
     QPushButton,
+    QSpinBox,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
     QWidget,
 )
 
+from data.event_config import event_config
 from data.models import Event, Player
 from ui.analysis.event_labels import event_label
 
@@ -25,6 +27,16 @@ HOME_COLOR = QColor("#e07b00")  # orange
 AWAY_COLOR = QColor("#1e6fd9")  # bleu
 
 SHOT_TYPES = ("2PTS_MADE", "2PTS_MISSED", "3PTS_MADE", "3PTS_MISSED")
+FT_TYPES = ("FT_MADE", "FT_MISSED")
+
+# Défense et dribbles n'ont de sens que pour les tirs de jeu (pas les
+# lancers francs, voir ShotDetailsDialog show_defense=False/show_dribbles=False).
+DEFENSE_EDITABLE_TYPES = SHOT_TYPES
+DRIBBLES_EDITABLE_TYPES = SHOT_TYPES
+
+# Le rebond offensif préalable, lui, a un sens pour les tirs ET les
+# lancers francs.
+OREB_APPLICABLE_TYPES = SHOT_TYPES + FT_TYPES
 
 TURNOVER_TYPES = (
     "TO_PASS",
@@ -46,6 +58,37 @@ SHOTS_ALL = "__SHOTS_ALL__"
 TURNOVERS_ALL = "__TURNOVERS_ALL__"
 
 
+# Index des colonnes du tableau, centralisés pour éviter les nombres
+# magiques disséminés dans le code.
+COL_TIME = 0
+COL_QUARTER = 1
+COL_PLAYER = 2
+COL_EVENT = 3
+COL_PHASE = 4
+COL_SYSTEM = 5
+COL_ACTION_TYPE = 6
+COL_DEFENSE = 7
+COL_OREB = 8
+COL_DRIBBLES = 9
+COL_EDIT = 10
+COL_DELETE = 11
+
+COLUMN_HEADERS = [
+    "Temps",
+    "QT",
+    "Joueuse",
+    "Événement",
+    "Phase",
+    "Système",
+    "Type d'action",
+    "Défense",
+    "Reb. off.",
+    "Dribbles",
+    "Modifier",
+    "Supprimer",
+]
+
+
 class PlayByPlayPanel(QWidget):
 
     event_deleted = Signal(int)
@@ -55,6 +98,11 @@ class PlayByPlayPanel(QWidget):
     export_requested = Signal(list, float, float)
 
     bulk_quarter_edit_requested = Signal(list, int)
+
+    # Édition directe depuis le tableau, sans passer par EditEventDialog :
+    # (event_id, nouvelle valeur). Chaîne vide = défense non renseignée.
+    event_defense_changed = Signal(int, str)
+    event_dribbles_changed = Signal(int, int)
 
     def __init__(
         self,
@@ -88,58 +136,22 @@ class PlayByPlayPanel(QWidget):
 
         filters_row_1 = QHBoxLayout()
 
-        filters_row_1.addWidget(
-            QLabel("Équipe :")
-        )
-
-        filters_row_1.addWidget(
-            self.team_filter
-        )
-
-        filters_row_1.addWidget(
-            QLabel("Joueuse :")
-        )
-
-        filters_row_1.addWidget(
-            self.player_filter
-        )
-
-        filters_row_1.addWidget(
-            QLabel("Événement :")
-        )
-
-        filters_row_1.addWidget(
-            self.event_filter
-        )
-
+        filters_row_1.addWidget(QLabel("Équipe :"))
+        filters_row_1.addWidget(self.team_filter)
+        filters_row_1.addWidget(QLabel("Joueuse :"))
+        filters_row_1.addWidget(self.player_filter)
+        filters_row_1.addWidget(QLabel("Événement :"))
+        filters_row_1.addWidget(self.event_filter)
         filters_row_1.addStretch()
 
         filters_row_2 = QHBoxLayout()
 
-        filters_row_2.addWidget(
-            QLabel("Phase :")
-        )
-
-        filters_row_2.addWidget(
-            self.phase_filter
-        )
-
-        filters_row_2.addWidget(
-            QLabel("Système :")
-        )
-
-        filters_row_2.addWidget(
-            self.system_filter
-        )
-
-        filters_row_2.addWidget(
-            QLabel("Type d'action :")
-        )
-
-        filters_row_2.addWidget(
-            self.action_type_filter
-        )
-
+        filters_row_2.addWidget(QLabel("Phase :"))
+        filters_row_2.addWidget(self.phase_filter)
+        filters_row_2.addWidget(QLabel("Système :"))
+        filters_row_2.addWidget(self.system_filter)
+        filters_row_2.addWidget(QLabel("Type d'action :"))
+        filters_row_2.addWidget(self.action_type_filter)
         filters_row_2.addStretch()
 
         filters_column = QVBoxLayout()
@@ -152,19 +164,9 @@ class PlayByPlayPanel(QWidget):
 
         self.table = QTableWidget(self)
 
-        self.table.setColumnCount(9)
+        self.table.setColumnCount(len(COLUMN_HEADERS))
 
-        self.table.setHorizontalHeaderLabels([
-            "Temps",
-            "QT",
-            "Joueuse",
-            "Événement",
-            "Phase",
-            "Système",
-            "Type d'action",
-            "Modifier",
-            "Supprimer",
-        ])
+        self.table.setHorizontalHeaderLabels(COLUMN_HEADERS)
 
         self.table.verticalHeader().setVisible(False)
 
@@ -438,8 +440,6 @@ class PlayByPlayPanel(QWidget):
             for e in self._all_events
         })
 
-        # Options "tirs" et "pertes de balle" regroupées, affichées avant
-        # la liste des événements individuels.
         shot_group_options = [
             ("Tirs réussis (2+3 pts)", SHOTS_MADE),
             ("Tirs manqués (2+3 pts)", SHOTS_MISSED),
@@ -654,31 +654,29 @@ class PlayByPlayPanel(QWidget):
                 f"{minutes:02d}:{seconds:02d}"
             )
 
+            values = {
+                COL_TIME: time_str,
+                COL_QUARTER: str(event.quarter),
+                COL_PLAYER: player_name,
+                COL_EVENT: event_label(event.event_type),
+                COL_PHASE: event.phase or "",
+                COL_SYSTEM: event.system or "",
+                COL_ACTION_TYPE: event.action_type or "",
+            }
 
-            values = [
-                time_str,
-                str(event.quarter),
-                player_name,
-                event_label(event.event_type),
-                event.phase or "",
-                event.system or "",
-                event.action_type or "",
-            ]
-
-
-            for col, value in enumerate(values):
+            for col, value in values.items():
 
                 item = QTableWidgetItem(
                     str(value)
                 )
 
-                if col in (0, 1):
+                if col in (COL_TIME, COL_QUARTER):
 
                     item.setTextAlignment(
                         Qt.AlignmentFlag.AlignCenter
                     )
 
-                if col == 2:
+                if col == COL_PLAYER:
 
                     if event.player_id in self._home_player_ids:
 
@@ -697,6 +695,86 @@ class PlayByPlayPanel(QWidget):
                     col,
                     item
                 )
+
+
+            # -------------------------
+            # Défense (éditable directement, pour les tirs de jeu)
+            # -------------------------
+
+            self.table.removeCellWidget(row, COL_DEFENSE)
+
+            if event.event_type in DEFENSE_EDITABLE_TYPES:
+
+                defense_combo = QComboBox()
+                defense_combo.addItem("", "")
+
+                for label in event_config.active_defense_level_names():
+                    defense_combo.addItem(label, label)
+
+                current_index = defense_combo.findData(event.defense_level or "")
+
+                defense_combo.blockSignals(True)
+                defense_combo.setCurrentIndex(
+                    current_index if current_index >= 0 else 0
+                )
+                defense_combo.blockSignals(False)
+
+                defense_combo.currentIndexChanged.connect(
+                    lambda _index, e=event, c=defense_combo:
+                    self.event_defense_changed.emit(e.id, c.currentData())
+                )
+
+                self.table.setCellWidget(row, COL_DEFENSE, defense_combo)
+
+            else:
+
+                self.table.setItem(row, COL_DEFENSE, QTableWidgetItem("-"))
+
+
+            # -------------------------
+            # Rebond offensif préalable (affichage seul)
+            # -------------------------
+
+            if event.event_type in OREB_APPLICABLE_TYPES:
+                oreb_text = "Oui" if event.prior_oreb else "Non"
+            else:
+                oreb_text = ""
+
+            oreb_item = QTableWidgetItem(oreb_text)
+            oreb_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+
+            self.table.setItem(row, COL_OREB, oreb_item)
+
+
+            # -------------------------
+            # Dribbles (éditable directement, pour les tirs de jeu)
+            # -------------------------
+
+            self.table.removeCellWidget(row, COL_DRIBBLES)
+
+            if event.event_type in DRIBBLES_EDITABLE_TYPES:
+
+                dribbles_spin = QSpinBox()
+                dribbles_spin.setRange(0, 15)
+
+                dribbles_spin.blockSignals(True)
+                dribbles_spin.setValue(event.dribbles or 0)
+                dribbles_spin.blockSignals(False)
+
+                # editingFinished (perte de focus / Entrée) plutôt que
+                # valueChanged, pour éviter de recharger tout le tableau à
+                # chaque clic sur les flèches (ce qui détruirait le widget
+                # en cours d'utilisation).
+                dribbles_spin.editingFinished.connect(
+                    lambda e=event, s=dribbles_spin:
+                    self.event_dribbles_changed.emit(e.id, s.value())
+                )
+
+                self.table.setCellWidget(row, COL_DRIBBLES, dribbles_spin)
+
+            else:
+
+                self.table.setItem(row, COL_DRIBBLES, QTableWidgetItem("-"))
 
 
             # -------------------------
@@ -737,7 +815,7 @@ class PlayByPlayPanel(QWidget):
 
             self.table.setCellWidget(
                 row,
-                7,
+                COL_EDIT,
                 edit_widget
             )
 
@@ -780,7 +858,7 @@ class PlayByPlayPanel(QWidget):
 
             self.table.setCellWidget(
                 row,
-                8,
+                COL_DELETE,
                 delete_widget
             )
 
@@ -794,6 +872,11 @@ class PlayByPlayPanel(QWidget):
         row: int,
         column: int
     ):
+
+        # Ne pas déclencher le seek si le double-clic tombe sur un widget
+        # interactif (combo défense, spinbox dribbles, boutons).
+        if column in (COL_DEFENSE, COL_DRIBBLES, COL_EDIT, COL_DELETE):
+            return
 
         if 0 <= row < len(self._events):
 
@@ -811,7 +894,6 @@ class PlayByPlayPanel(QWidget):
         before = self.export_before_spin.value()
         after = self.export_after_spin.value()
 
-        # On exporte exactement les évènements actuellement filtrés/affichés
         self.export_requested.emit(
             list(self._events),
             before,

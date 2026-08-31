@@ -671,6 +671,14 @@ class AnalysisWindow(QMainWindow):
             self._on_bulk_quarter_edit
         )
 
+        self.playbyplay_panel.event_defense_changed.connect(
+            self._on_defense_changed
+        )
+
+        self.playbyplay_panel.event_dribbles_changed.connect(
+            self._on_dribbles_changed
+        )
+
     def _on_feature_flags_changed(self) -> None:
 
         self.phase_panel.setVisible(
@@ -2204,6 +2212,24 @@ class AnalysisWindow(QMainWindow):
             f"Quart-temps mis à jour pour {len(event_ids)} événement(s)",
             3000
         )
+
+    def _on_defense_changed(self, event_id: int, defense_level: str) -> None:
+
+        self.database.update_event_defense_level(
+            event_id,
+            defense_level or None,
+        )
+
+        self._refresh_data()
+
+    def _on_dribbles_changed(self, event_id: int, dribbles: int) -> None:
+
+        self.database.update_event_dribbles(
+            event_id,
+            dribbles,
+        )
+
+        self._refresh_data()
 
     # =====================================================
     # Double clic Play by Play

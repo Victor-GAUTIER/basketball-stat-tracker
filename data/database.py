@@ -743,6 +743,24 @@ class Database:
         )
         self.connection.commit()
 
+    def update_event_defense_level(self, event_id: int, defense_level: Optional[str]) -> None:
+        """Modifie uniquement le niveau de défense d'un événement (édition
+        directe depuis le play-by-play, sans passer par EditEventDialog)."""
+        self.connection.execute(
+            "UPDATE events SET defense_level = ? WHERE id = ?",
+            (defense_level, event_id),
+        )
+        self.connection.commit()
+
+    def update_event_dribbles(self, event_id: int, dribbles: Optional[int]) -> None:
+        """Modifie uniquement le nombre de dribbles d'un événement (édition
+        directe depuis le play-by-play)."""
+        self.connection.execute(
+            "UPDATE events SET dribbles = ? WHERE id = ?",
+            (dribbles, event_id),
+        )
+        self.connection.commit()
+
     def update_events_quarter(self, event_ids: List[int], quarter: int) -> None:
         """Modifie le quart-temps de plusieurs événements en une seule fois
         (édition groupée depuis le Play by play), sans toucher aux autres
