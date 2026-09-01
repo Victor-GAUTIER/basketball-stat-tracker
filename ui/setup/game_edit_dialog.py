@@ -1,9 +1,9 @@
 """Dialogue de modification d'un match déjà enregistré.
 
 Regroupe en un seul endroit ce qu'on doit pouvoir corriger après coup sur
-un match : nom, date, chemin de la vidéo, couleurs des deux équipes, et
-joueuses présentes (via le dialogue déjà utilisé pendant l'analyse,
-ui.analysis.game_players_dialog.GamePlayersDialog).
+un match : nom, date, chemin de la vidéo, saison, couleurs des deux
+équipes, et joueuses présentes (via le dialogue déjà utilisé pendant
+l'analyse, ui.analysis.game_players_dialog.GamePlayersDialog).
 """
 
 from __future__ import annotations
@@ -15,12 +15,14 @@ from PySide6.QtCore import QDate
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QColorDialog,
+    QComboBox,
     QDateEdit,
     QDialog,
     QDialogButtonBox,
     QFileDialog,
     QFormLayout,
     QHBoxLayout,
+    QInputDialog,
     QLabel,
     QLineEdit,
     QMessageBox,
@@ -36,11 +38,15 @@ from data.models import Game
 DEFAULT_HOME_COLOR = "#297ffe"
 DEFAULT_AWAY_COLOR = "#e67e22"
 
+# Valeur spéciale utilisée dans season_combo pour déclencher la création
+# d'une nouvelle saison à la volée.
+_NEW_SEASON = "__NEW_SEASON__"
+
 
 class EditGameDialog(QDialog):
-    """Permet de modifier les informations générales d'un match, les
-    couleurs des deux équipes, et d'ouvrir la gestion des joueuses
-    présentes."""
+    """Permet de modifier les informations générales d'un match, sa
+    saison, les couleurs des deux équipes, et d'ouvrir la gestion des
+    joueuses présentes."""
 
     def __init__(
         self,
@@ -63,6 +69,9 @@ class EditGameDialog(QDialog):
 
         self._home_color = self.home_team.color if self.home_team else DEFAULT_HOME_COLOR
         self._away_color = self.away_team.color if self.away_team else DEFAULT_AWAY_COLOR
+
+        current_season = database.get_season_for_game(game.id)
+        self._current_season_id = current_season.id if current_season else None
 
         layout = QVBoxLayout(self)
 
@@ -90,10 +99,15 @@ class EditGameDialog(QDialog):
         video_row.addWidget(self.video_path_edit)
         video_row.addWidget(browse_button)
 
+        self.season_combo = QComboBox(self)
+        self.season_combo.currentIndexChanged.connect(self._on_season_combo_changed)
+        self._reload_seasons()
+
         form = QFormLayout()
         form.addRow("Nom du match :", self.name_edit)
         form.addRow("Date :", self.date_edit)
         form.addRow("Vidéo :", video_row)
+        form.addRow("Saison :", self.season_combo)
 
         layout.addLayout(form)
 
@@ -141,6 +155,66 @@ class EditGameDialog(QDialog):
         buttons.rejected.connect(self.reject)
 
         layout.addWidget(buttons)
+
+    # ------------------------------------------------------------------
+    # Saison
+    # ------------------------------------------------------------------
+    def _reload_seasons(self) -> None:
+
+        previous_data = (
+            self.season_combo.currentData()
+            if self.season_combo.count() > 0
+            else self._current_season_id
+        )
+
+        self.season_combo.blockSignals(True)
+
+        self.season_combo.clear()
+
+        self.season_combo.addItem("Sans saison", None)
+
+        for season in self.database.get_seasons():
+            self.season_combo.addItem(season.name, season.id)
+
+        self.season_combo.insertSeparator(self.season_combo.count())
+
+        self.season_combo.addItem("+ Nouvelle saison...", _NEW_SEASON)
+
+        index = self.season_combo.findData(previous_data)
+        self.season_combo.setCurrentIndex(index if index >= 0 else 0)
+
+        self.season_combo.blockSignals(False)
+
+    def _on_season_combo_changed(self, _index: int) -> None:
+
+        if self.season_combo.currentData() != _NEW_SEASON:
+            return
+
+        name, ok = QInputDialog.getText(
+            self, "Nouvelle saison", "Nom (ex: NF2 2025-26) :"
+        )
+
+        if not ok or not name.strip():
+            self.season_combo.setCurrentIndex(0)
+            return
+
+        try:
+            new_id = self.database.create_season(name.strip())
+        except Exception:
+            QMessageBox.warning(
+                self, "Nom déjà utilisé", "Une saison porte déjà ce nom."
+            )
+            self.season_combo.setCurrentIndex(0)
+            return
+
+        self._current_season_id = new_id
+        self._reload_seasons()
+
+    def _selected_season_id(self) -> Optional[int]:
+
+        data = self.season_combo.currentData()
+
+        return None if data == _NEW_SEASON else data
 
     # ------------------------------------------------------------------
     # Couleurs
@@ -292,6 +366,11 @@ class EditGameDialog(QDialog):
             name,
             self.date_edit.date().toString("yyyy-MM-dd"),
             video_path,
+        )
+
+        self.database.set_game_season(
+            self.game.id,
+            self._selected_season_id(),
         )
 
         if self.home_team:

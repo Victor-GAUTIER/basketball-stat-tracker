@@ -6,7 +6,7 @@ base de données : création du match, des équipes et des joueurs.
 
 from __future__ import annotations
 
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 from data.database import Database
 
@@ -30,6 +30,7 @@ class SetupController:
         away_players: List[Tuple[str, int]],
         away_present_players: List[Tuple[str, int]],
         away_color: str,
+        season_id: Optional[int] = None,
     ) -> int:
         """Crée le match, les équipes et les joueurs en base de données.
 
@@ -45,11 +46,15 @@ class SetupController:
             away_players: effectif complet (nom, numéro) de l'équipe à l'extérieur.
             away_present_players: sous-ensemble de `away_players` présent à ce match.
             away_color: couleur (hex) de l'équipe à l'extérieur.
+            season_id: saison à laquelle rattacher ce match (None = aucune
+                saison, "Sans saison").
 
         Returns:
             L'identifiant du match nouvellement créé.
         """
-        game_id = self.database.create_game(game_name, game_date, video_path)
+        game_id = self.database.create_game(
+            game_name, game_date, video_path, season_id=season_id
+        )
 
         home_team_id = self.database.get_or_create_team(home_team_name, home_color)
         away_team_id = self.database.get_or_create_team(away_team_name, away_color)

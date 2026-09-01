@@ -65,3 +65,11 @@ class Event:
     defense_level: Optional[str] = None
     prior_oreb: Optional[bool] = None
     dribbles: Optional[int] = None
+
+
+@dataclass
+class Season:
+    """Représente un groupe de matchs."""
+
+    id: Optional[int]
+    name: str

@@ -122,6 +122,12 @@ CREATE TABLE IF NOT EXISTS event_types (
     is_builtin INTEGER NOT NULL DEFAULT 0,
     sort_order INTEGER NOT NULL DEFAULT 0
 );
+
+CREATE TABLE IF NOT EXISTS seasons (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    name       TEXT NOT NULL UNIQUE,
+    sort_order INTEGER NOT NULL DEFAULT 0
+);
 """
 
 
@@ -226,17 +232,104 @@ class Database:
             )
         self._connection.commit()
 
-        # Index (non contraignant) sur (team_id, name), pour accélérer la
-        # recherche d'une joueuse par son identité (voir get_or_create_player).
-        # Volontairement PAS de contrainte UNIQUE : une base déjà existante
-        # peut contenir des doublons de nom hérités de l'ancien système
-        # d'identification par numéro, et on ne veut pas faire planter la
-        # migration pour ça.
-        self._connection.execute(
-            "CREATE INDEX IF NOT EXISTS idx_players_team_name "
-            "ON players (team_id, name)"
+        if "season_id" not in {
+            row["name"]
+            for row in self._connection.execute(
+                "PRAGMA table_info(games)"
+            ).fetchall()
+        }:
+            self._connection.execute(
+                "ALTER TABLE games ADD COLUMN season_id INTEGER "
+                "REFERENCES seasons(id) ON DELETE SET NULL"
+            )
+            self._connection.commit()
+
+    # ------------------------------------------------------------------
+    # Saisons (groupes de matchs)
+    # ------------------------------------------------------------------
+
+    def create_season(self, name: str) -> int:
+        cur = self.connection.execute(
+            "INSERT INTO seasons (name, sort_order) VALUES (?, "
+            "(SELECT COALESCE(MAX(sort_order), -1) + 1 FROM seasons))",
+            (name,),
         )
-        self._connection.commit()
+        self.connection.commit()
+        return int(cur.lastrowid)
+
+    def get_seasons(self) -> List[Season]:
+        from data.models import Season
+
+        rows = self.connection.execute(
+            "SELECT id, name FROM seasons ORDER BY sort_order, name"
+        ).fetchall()
+        return [Season(id=r["id"], name=r["name"]) for r in rows]
+
+    def rename_season(self, season_id: int, name: str) -> None:
+        self.connection.execute(
+            "UPDATE seasons SET name = ? WHERE id = ?", (name, season_id)
+        )
+        self.connection.commit()
+
+    def delete_season(self, season_id: int) -> None:
+        """Supprime la saison. Les matchs qui y étaient rattachés ne sont
+        PAS supprimés : leur season_id repasse à NULL (voir ON DELETE SET
+        NULL du schéma), ils redeviennent simplement "sans saison"."""
+
+        self.connection.execute(
+            "DELETE FROM seasons WHERE id = ?", (season_id,)
+        )
+        self.connection.commit()
+
+    def set_game_season(self, game_id: int, season_id: Optional[int]) -> None:
+        """Rattache (ou détache si season_id=None) un match à une saison."""
+
+        self.connection.execute(
+            "UPDATE games SET season_id = ? WHERE id = ?",
+            (season_id, game_id),
+        )
+        self.connection.commit()
+
+    def get_games_by_season(self, season_id: Optional[int]) -> List[Game]:
+        """Matchs d'une saison donnée, ou matchs sans saison si
+        season_id=None."""
+
+        if season_id is None:
+            cur = self.connection.execute(
+                "SELECT id, name, date, video_path FROM games "
+                "WHERE season_id IS NULL ORDER BY date DESC"
+            )
+        else:
+            cur = self.connection.execute(
+                "SELECT id, name, date, video_path FROM games "
+                "WHERE season_id = ? ORDER BY date DESC",
+                (season_id,),
+            )
+
+        return [
+            Game(id=r["id"], name=r["name"], date=r["date"], video_path=r["video_path"])
+            for r in cur.fetchall()
+        ]
+
+    def get_season_for_game(self, game_id: int) -> Optional[Season]:
+        from data.models import Season
+
+        cur = self.connection.execute(
+            "SELECT s.id, s.name FROM seasons s "
+            "JOIN games g ON g.season_id = s.id "
+            "WHERE g.id = ?",
+            (game_id,),
+        )
+        r = cur.fetchone()
+        if r is None:
+            return None
+        return Season(id=r["id"], name=r["name"])
+
+    def count_games_in_season(self, season_id: int) -> int:
+        cur = self.connection.execute(
+            "SELECT COUNT(*) AS n FROM games WHERE season_id = ?", (season_id,)
+        )
+        return int(cur.fetchone()["n"])
 
     def _seed_event_config(self) -> None:
         """Peuple les tables de configuration des événements avec les
@@ -449,10 +542,16 @@ class Database:
     # ------------------------------------------------------------------
     # Matchs
     # ------------------------------------------------------------------
-    def create_game(self, name: str, date: str, video_path: str) -> int:
+    def create_game(
+        self,
+        name: str,
+        date: str,
+        video_path: str,
+        season_id: Optional[int] = None,
+    ) -> int:
         cur = self.connection.execute(
-            "INSERT INTO games (name, date, video_path) VALUES (?, ?, ?)",
-            (name, date, video_path),
+            "INSERT INTO games (name, date, video_path, season_id) VALUES (?, ?, ?, ?)",
+            (name, date, video_path, season_id),
         )
         self.connection.commit()
         return int(cur.lastrowid)

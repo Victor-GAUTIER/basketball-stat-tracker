@@ -1569,23 +1569,13 @@ class AnalysisWindow(QMainWindow):
             lambda: self._hide_toast(toast)
         )
 
+    def _hide_toast(self, toast: QLabel):
 
+        if self._toast_label is not toast:
+            return
 
-    def _hide_toast(
-        self,
-        toast: QLabel
-    ):
-
-        # On ne supprime que si c'est toujours le toast actif
-        # (évite de supprimer un toast plus récent par erreur)
-        if self._toast_label is toast:
-
-            self._toast_label = None
-
-
+        self._toast_label = None
         toast.deleteLater()
-
-
 
     def _event_label(
         self,

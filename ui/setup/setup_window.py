@@ -1,7 +1,8 @@
 """Fenêtre de préparation du match (SetupWindow).
 
 Permet de saisir les informations générales du match, la vidéo à analyser,
-ainsi que la composition des deux équipes, avant de lancer l'analyse.
+la saison à laquelle rattacher le match (optionnel), ainsi que la
+composition des deux équipes, avant de lancer l'analyse.
 """
 
 from __future__ import annotations
@@ -10,10 +11,12 @@ from typing import List, Optional
 
 from PySide6.QtCore import QDate
 from PySide6.QtWidgets import (
+    QComboBox,
     QDateEdit,
     QFileDialog,
     QFormLayout,
     QHBoxLayout,
+    QInputDialog,
     QLineEdit,
     QMainWindow,
     QMessageBox,
@@ -27,13 +30,27 @@ from data.database import Database
 from ui.setup.team_editor import TeamEditor
 
 
+# Valeur spéciale utilisée dans season_combo pour déclencher la création
+# d'une nouvelle saison à la volée.
+_NEW_SEASON = "__NEW_SEASON__"
+
+
 class SetupWindow(QMainWindow):
     """Fenêtre affichée au lancement de l'application, pour préparer un match."""
 
-    def __init__(self, database: Database) -> None:
+    def __init__(
+        self,
+        database: Database,
+        initial_season_id: Optional[int] = None,
+    ) -> None:
         super().__init__()
         self.database = database
         self.controller = SetupController(database)
+
+        # Saison à présélectionner (ex: le match est créé depuis
+        # l'intérieur d'une saison ouverte dans LaunchWindow).
+        self._initial_season_id = initial_season_id
+
         # Référence gardée pour empêcher la fenêtre d'analyse d'être détruite
         # par le garbage collector Python une fois SetupWindow fermée.
         self.analysis_window: Optional[QWidget] = None
@@ -69,10 +86,15 @@ class SetupWindow(QMainWindow):
         video_row.addWidget(self.video_path_edit)
         video_row.addWidget(browse_button)
 
+        self.season_combo = QComboBox(self)
+        self.season_combo.currentIndexChanged.connect(self._on_season_combo_changed)
+        self._reload_seasons()
+
         form = QFormLayout()
         form.addRow("Nom du match :", self.match_name_edit)
         form.addRow("Date :", self.match_date_edit)
         form.addRow("Vidéo :", video_row)
+        form.addRow("Saison :", self.season_combo)
 
         main_layout.addLayout(form)
 
@@ -90,6 +112,71 @@ class SetupWindow(QMainWindow):
         self.start_button.setMinimumHeight(42)
         self.start_button.clicked.connect(self._on_start_analysis)
         main_layout.addWidget(self.start_button)
+
+    # ------------------------------------------------------------------
+    # Saison
+    # ------------------------------------------------------------------
+    def _reload_seasons(self) -> None:
+        """(Re)construit la liste déroulante des saisons, en essayant de
+        conserver la sélection courante (ou self._initial_season_id lors
+        du tout premier appel)."""
+
+        previous_data = (
+            self.season_combo.currentData()
+            if self.season_combo.count() > 0
+            else self._initial_season_id
+        )
+
+        self.season_combo.blockSignals(True)
+
+        self.season_combo.clear()
+
+        self.season_combo.addItem("Sans saison", None)
+
+        for season in self.database.get_seasons():
+            self.season_combo.addItem(season.name, season.id)
+
+        self.season_combo.insertSeparator(self.season_combo.count())
+
+        self.season_combo.addItem("+ Nouvelle saison...", _NEW_SEASON)
+
+        index = self.season_combo.findData(previous_data)
+        self.season_combo.setCurrentIndex(index if index >= 0 else 0)
+
+        self.season_combo.blockSignals(False)
+
+    def _on_season_combo_changed(self, _index: int) -> None:
+
+        if self.season_combo.currentData() != _NEW_SEASON:
+            return
+
+        name, ok = QInputDialog.getText(
+            self, "Nouvelle saison", "Nom (ex: NF2 2025-26) :"
+        )
+
+        if not ok or not name.strip():
+            # Annulé : retombe sur "Sans saison" plutôt que de laisser
+            # l'entrée "+ Nouvelle saison..." sélectionnée.
+            self.season_combo.setCurrentIndex(0)
+            return
+
+        try:
+            new_id = self.database.create_season(name.strip())
+        except Exception:
+            QMessageBox.warning(
+                self, "Nom déjà utilisé", "Une saison porte déjà ce nom."
+            )
+            self.season_combo.setCurrentIndex(0)
+            return
+
+        self._initial_season_id = new_id
+        self._reload_seasons()
+
+    def _selected_season_id(self) -> Optional[int]:
+
+        data = self.season_combo.currentData()
+
+        return None if data == _NEW_SEASON else data
 
     # ------------------------------------------------------------------
     # Actions
@@ -122,6 +209,7 @@ class SetupWindow(QMainWindow):
             away_players=self.away_team_editor.players(),
             away_present_players=self.away_team_editor.present_players(),
             away_color=self.away_team_editor.team_color(),
+            season_id=self._selected_season_id(),
         )
 
         self._open_analysis_window(game_id)
