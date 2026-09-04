@@ -88,12 +88,18 @@ class VideoExportWorker(QObject):
     def run(self):
         try:
             with tempfile.TemporaryDirectory() as tmp_dir:
+
+                TARGET_W = 1920
+                TARGET_H = 1080
+                TARGET_FPS = 30
+
                 segment_paths = []
                 total = len(self.events)
 
                 for i, event in enumerate(self.events, start=1):
+
                     if self._cancelled:
-                        self._emit_cancelled()
+                        self.cancelled.emit()
                         return
 
                     video_path = self._video_path_for(event)
@@ -107,10 +113,8 @@ class VideoExportWorker(QObject):
 
                     start = max(0.0, event.timestamp - self.before)
                     duration = self.before + self.after
-                    segment_path = os.path.join(
-                        tmp_dir,
-                        f"seg_{i:04d}.mp4"
-                    )
+
+                    segment_path = os.path.join(tmp_dir, f"seg_{i:04d}.mp4")
 
                     cmd = [
                         get_ffmpeg_path(),
@@ -120,6 +124,10 @@ class VideoExportWorker(QObject):
                         "-t", f"{duration:.3f}",
                         "-map", "0:v:0",
                         "-map", "0:a:0?",
+                        "-vf",
+                        f"scale={TARGET_W}:{TARGET_H}:force_original_aspect_ratio=decrease,"
+                        f"pad={TARGET_W}:{TARGET_H}:(ow-iw)/2:(oh-ih)/2,setsar=1",
+                        "-r", str(TARGET_FPS),
                         "-c:v", "libx264",
                         "-preset", "veryfast",
                         "-fps_mode", "cfr",
@@ -133,16 +141,14 @@ class VideoExportWorker(QObject):
                     returncode, stdout, stderr = self._run_ffmpeg(cmd)
 
                     if self._cancelled:
-                        self._emit_cancelled()
+                        self.cancelled.emit()
                         return
 
                     if returncode != 0:
                         self.error.emit(
-                            stderr.decode(
-                                "utf-8",
-                                errors="replace"
-                            ).strip()
-                            or f"FFmpeg a échoué pour le segment {i}."
+                            f"Erreur ffmpeg sur le segment {i} "
+                            f"(t={event.timestamp:.1f}s) :\n"
+                            f"{stderr.decode(errors='ignore')}"
                         )
                         return
 
@@ -150,73 +156,51 @@ class VideoExportWorker(QObject):
                     self.progress.emit(i, total)
 
                 if self._cancelled:
-                    self._emit_cancelled()
+                    self.cancelled.emit()
                     return
 
-                concat_cmd = [get_ffmpeg_path(), "-y"]
+                # -------------------------
+                # 2. Concaténation : tous les segments ont déjà la même
+                #    résolution/fps (normalisés à l'étape 1), donc un simple
+                #    concat demuxer + copie de flux suffit. Contrairement au
+                #    filter_complex précédent, ffmpeg ne lit les fichiers que
+                #    séquentiellement, sans les garder tous ouverts en
+                #    mémoire à la fois : ça passe à l'échelle quel que soit
+                #    le nombre de segments.
+                # -------------------------
 
-                for path in segment_paths:
-                    concat_cmd += ["-i", path]
+                concat_list_path = os.path.join(tmp_dir, "concat_list.txt")
 
-                n = len(segment_paths)
-                TARGET_W = 1920
-                TARGET_H = 1080
-                TARGET_FPS = 30
+                with open(concat_list_path, "w", encoding="utf-8") as f:
+                    for path in segment_paths:
+                        escaped = path.replace("'", "'\\''")
+                        f.write(f"file '{escaped}'\n")
 
-                filter_parts = "".join(
-                    f"[{i}:v:0]"
-                    f"scale={TARGET_W}:{TARGET_H}:force_original_aspect_ratio=decrease,"
-                    f"pad={TARGET_W}:{TARGET_H}:(ow-iw)/2:(oh-ih)/2,"
-                    f"setsar=1,"
-                    f"fps={TARGET_FPS},"
-                    f"setpts=PTS-STARTPTS[v{i}];"
-                    f"[{i}:a:0]"
-                    f"aresample=48000,"
-                    f"asetpts=PTS-STARTPTS[a{i}];"
-                    for i in range(n)
-                )
-
-                concat_inputs = "".join(
-                    f"[v{i}][a{i}]"
-                    for i in range(n)
-                )
-
-                filter_complex = (
-                    f"{filter_parts}"
-                    f"{concat_inputs}"
-                    f"concat=n={n}:v=1:a=1[outv][outa]"
-                )
-
-                concat_cmd += [
-                    "-filter_complex", filter_complex,
-                    "-map", "[outv]",
-                    "-map", "[outa]",
-                    "-c:v", "libx264",
-                    "-preset", "veryfast",
-                    "-c:a", "aac",
+                concat_cmd = [
+                    get_ffmpeg_path(),
+                    "-y",
+                    "-f", "concat",
+                    "-safe", "0",
+                    "-i", concat_list_path,
+                    "-c", "copy",
                     self.output_path,
                 ]
 
                 returncode, stdout, stderr = self._run_ffmpeg(concat_cmd)
 
                 if self._cancelled:
-                    self._emit_cancelled()
+                    self.cancelled.emit()
                     return
 
                 if returncode != 0:
                     self.error.emit(
-                        stderr.decode(
-                            "utf-8",
-                            errors="replace"
-                        ).strip()
-                        or "FFmpeg a échoué lors de l'assemblage du montage."
+                        "Erreur ffmpeg lors de la concaténation :\n"
+                        f"{stderr.decode(errors='ignore')}"
                     )
                     return
 
                 self.finished.emit(self.output_path)
 
         except Exception as exc:
-            if self._cancelled:
-                self._emit_cancelled()
-            else:
+            if not self._cancelled:
                 self.error.emit(str(exc))
