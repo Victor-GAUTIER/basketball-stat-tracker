@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
 from data.event_config import event_config
 from data.models import Event, Player
 from ui.analysis.event_labels import event_label
+from ui.analysis.filters import MultiSelectFilter
 
 HOME_COLOR = QColor("#e07b00")  # orange
 AWAY_COLOR = QColor("#1e6fd9")  # bleu
@@ -29,13 +30,8 @@ AWAY_COLOR = QColor("#1e6fd9")  # bleu
 SHOT_TYPES = ("2PTS_MADE", "2PTS_MISSED", "3PTS_MADE", "3PTS_MISSED")
 FT_TYPES = ("FT_MADE", "FT_MISSED")
 
-# Défense et dribbles n'ont de sens que pour les tirs de jeu (pas les
-# lancers francs, voir ShotDetailsDialog show_defense=False/show_dribbles=False).
 DEFENSE_EDITABLE_TYPES = SHOT_TYPES
 DRIBBLES_EDITABLE_TYPES = SHOT_TYPES
-
-# Le rebond offensif préalable, lui, a un sens pour les tirs ET les
-# lancers francs.
 OREB_APPLICABLE_TYPES = SHOT_TYPES + FT_TYPES
 
 TURNOVER_TYPES = (
@@ -57,9 +53,12 @@ SHOTS_MISSED = "__SHOTS_MISSED__"
 SHOTS_ALL = "__SHOTS_ALL__"
 TURNOVERS_ALL = "__TURNOVERS_ALL__"
 
+# Valeurs spéciales pour le filtre "Équipe" (MultiSelectFilter attend des
+# ids entiers, on utilise -1/-2 plutôt que "home"/"away").
+TEAM_HOME = -1
+TEAM_AWAY = -2
 
-# Index des colonnes du tableau, centralisés pour éviter les nombres
-# magiques disséminés dans le code.
+
 COL_TIME = 0
 COL_QUARTER = 1
 COL_PLAYER = 2
@@ -99,8 +98,6 @@ class PlayByPlayPanel(QWidget):
 
     bulk_quarter_edit_requested = Signal(list, int)
 
-    # Édition directe depuis le tableau, sans passer par EditEventDialog :
-    # (event_id, nouvelle valeur). Chaîne vide = défense non renseignée.
     event_defense_changed = Signal(int, str)
     event_dribbles_changed = Signal(int, int)
 
@@ -111,15 +108,15 @@ class PlayByPlayPanel(QWidget):
         super().__init__(parent)
 
         # -------------------------
-        # Filtres
+        # Filtres — tous en sélection multiple (voir ui.analysis.filters)
         # -------------------------
 
-        self.team_filter = QComboBox(self)
-        self.player_filter = QComboBox(self)
-        self.event_filter = QComboBox(self)
-        self.phase_filter = QComboBox(self)
-        self.system_filter = QComboBox(self)
-        self.action_type_filter = QComboBox(self)
+        self.team_filter = MultiSelectFilter("Équipe", [], self)
+        self.player_filter = MultiSelectFilter("Joueuse", [], self)
+        self.event_filter = MultiSelectFilter("Événement", [], self)
+        self.phase_filter = MultiSelectFilter("Phase", [], self)
+        self.system_filter = MultiSelectFilter("Système", [], self)
+        self.action_type_filter = MultiSelectFilter("Type d'action", [], self)
 
         for combo in (
             self.team_filter,
@@ -129,28 +126,19 @@ class PlayByPlayPanel(QWidget):
             self.system_filter,
             self.action_type_filter,
         ):
-
-            combo.currentIndexChanged.connect(
-                self._apply_filters
-            )
+            combo.on_change = self._apply_filters
 
         filters_row_1 = QHBoxLayout()
 
-        filters_row_1.addWidget(QLabel("Équipe :"))
         filters_row_1.addWidget(self.team_filter)
-        filters_row_1.addWidget(QLabel("Joueuse :"))
         filters_row_1.addWidget(self.player_filter)
-        filters_row_1.addWidget(QLabel("Événement :"))
         filters_row_1.addWidget(self.event_filter)
         filters_row_1.addStretch()
 
         filters_row_2 = QHBoxLayout()
 
-        filters_row_2.addWidget(QLabel("Phase :"))
         filters_row_2.addWidget(self.phase_filter)
-        filters_row_2.addWidget(QLabel("Système :"))
         filters_row_2.addWidget(self.system_filter)
-        filters_row_2.addWidget(QLabel("Type d'action :"))
         filters_row_2.addWidget(self.action_type_filter)
         filters_row_2.addStretch()
 
@@ -257,6 +245,13 @@ class PlayByPlayPanel(QWidget):
         self._home_color = HOME_COLOR
         self._away_color = AWAY_COLOR
 
+        # Mapping libellé -> id numérique pour les filtres Phase/Système/
+        # Type d'action, dont les valeurs réelles sont des chaînes : voir
+        # _string_filter_selection ci-dessous.
+        self._phase_ids: Dict[str, int] = {}
+        self._system_ids: Dict[str, int] = {}
+        self._action_type_ids: Dict[str, int] = {}
+
     # =====================================================
     # Chargement des données
     # =====================================================
@@ -309,9 +304,6 @@ class PlayByPlayPanel(QWidget):
         self._apply_filters()
 
     def set_team_colors(self, home_color: str, away_color: str) -> None:
-            """Met à jour les couleurs utilisées pour distinguer les deux
-            équipes dans le tableau (au lieu du bleu/orange par défaut)."""
-
             self._home_color = QColor(home_color)
             self._away_color = QColor(away_color)
 
@@ -327,38 +319,10 @@ class PlayByPlayPanel(QWidget):
         away_name: str
     ):
 
-        combo = self.team_filter
-
-        previous = combo.currentData()
-
-        combo.blockSignals(True)
-
-        combo.clear()
-
-        combo.addItem(
-            "Toutes les équipes",
-            None
-        )
-
-        combo.addItem(
-            home_name,
-            "home"
-        )
-
-        combo.addItem(
-            away_name,
-            "away"
-        )
-
-        index = combo.findData(
-            previous
-        )
-
-        combo.setCurrentIndex(
-            index if index >= 0 else 0
-        )
-
-        combo.blockSignals(False)
+        self.team_filter.set_items([
+            (TEAM_HOME, home_name),
+            (TEAM_AWAY, away_name),
+        ])
 
 
     def _populate_player_filter(
@@ -368,72 +332,27 @@ class PlayByPlayPanel(QWidget):
         home_name: str,
         away_name: str
     ):
+        """Liste plate (MultiSelectFilter ne supporte pas les en-têtes de
+        groupe non sélectionnables), le nom d'équipe est donc préfixé au
+        libellé de chaque joueuse."""
 
-        combo = self.player_filter
+        items: List[Tuple[int, str]] = [
+            (p.id, f"{home_name} — #{p.number} {p.name}")
+            for p in sorted(home_players, key=lambda p: p.number)
+        ] + [
+            (p.id, f"{away_name} — #{p.number} {p.name}")
+            for p in sorted(away_players, key=lambda p: p.number)
+        ]
 
-        previous = combo.currentData()
-
-        combo.blockSignals(True)
-
-        combo.clear()
-
-        combo.addItem(
-            "Toutes les joueuses",
-            None
-        )
-
-        def add_group(label, players):
-
-            if not players:
-                return
-
-            combo.insertSeparator(
-                combo.count()
-            )
-
-            header_index = combo.count()
-
-            combo.addItem(
-                label,
-                None
-            )
-
-            combo.model().item(
-                header_index
-            ).setEnabled(False)
-
-            for player in sorted(
-                players,
-                key=lambda p: p.number
-            ):
-
-                combo.addItem(
-                    f"#{player.number} {player.name}",
-                    player.id
-                )
-
-        add_group(
-            home_name,
-            home_players
-        )
-
-        add_group(
-            away_name,
-            away_players
-        )
-
-        index = combo.findData(
-            previous
-        )
-
-        combo.setCurrentIndex(
-            index if index >= 0 else 0
-        )
-
-        combo.blockSignals(False)
+        self.player_filter.set_items(items)
 
 
     def _populate_other_filters(self):
+
+        # Phase/Système/Type d'action : construits à partir des valeurs
+        # RÉELLEMENT présentes dans les événements du match (pas depuis
+        # data.event_config), pour ne proposer que des filtres pertinents
+        # pour ce match précis.
 
         event_codes = sorted({
             e.event_type
@@ -441,19 +360,23 @@ class PlayByPlayPanel(QWidget):
         })
 
         shot_group_options = [
-            ("Tirs réussis (2+3 pts)", SHOTS_MADE),
-            ("Tirs manqués (2+3 pts)", SHOTS_MISSED),
-            ("Tous les tirs (2+3 pts)", SHOTS_ALL),
+            (SHOTS_MADE, "Tirs réussis (2+3 pts)"),
+            (SHOTS_MISSED, "Tirs manqués (2+3 pts)"),
+            (SHOTS_ALL, "Tous les tirs (2+3 pts)"),
         ]
 
         turnover_group_options = [
-            ("Pertes de balle (tous types)", TURNOVERS_ALL),
+            (TURNOVERS_ALL, "Pertes de balle (tous types)"),
         ]
 
         event_options = [
-            (event_label(code), code)
+            (code, event_label(code))
             for code in event_codes
         ]
+
+        self.event_filter.set_items(
+            shot_group_options + turnover_group_options + event_options
+        )
 
         phase_values = sorted({
             e.phase
@@ -461,21 +384,11 @@ class PlayByPlayPanel(QWidget):
             if e.phase
         })
 
-        phase_options = [
-            (value, value)
-            for value in phase_values
-        ]
-
         system_values = sorted({
             e.system
             for e in self._all_events
             if e.system
         })
-
-        system_options = [
-            (value, value)
-            for value in system_values
-        ]
 
         action_type_values = sorted({
             e.action_type
@@ -483,70 +396,53 @@ class PlayByPlayPanel(QWidget):
             if e.action_type
         })
 
-        action_type_options = [
-            (value, value)
-            for value in action_type_values
-        ]
-
-        self._populate_combo(
-            self.event_filter,
-            "Tous les événements",
-            shot_group_options + turnover_group_options + event_options
+        self._populate_string_filter(
+            self.phase_filter, self._phase_ids, phase_values
+        )
+        self._populate_string_filter(
+            self.system_filter, self._system_ids, system_values
+        )
+        self._populate_string_filter(
+            self.action_type_filter, self._action_type_ids, action_type_values
         )
 
-        self._populate_combo(
-            self.phase_filter,
-            "Toutes les phases",
-            phase_options
-        )
-
-        self._populate_combo(
-            self.system_filter,
-            "Tous les systèmes",
-            system_options
-        )
-
-        self._populate_combo(
-            self.action_type_filter,
-            "Tous les types d'action",
-            action_type_options
-        )
-
-
-    def _populate_combo(
+    def _populate_string_filter(
         self,
-        combo: QComboBox,
-        placeholder: str,
-        options: List[Tuple[str, object]]
-    ):
+        widget: MultiSelectFilter,
+        id_map: Dict[str, int],
+        values: List[str],
+    ) -> None:
+        """MultiSelectFilter attend des ids entiers ; phase/système/type
+        d'action sont des chaînes en base. On leur attribue un id entier
+        stable (position dans la liste triée) et on garde le mapping
+        inverse pour retrouver la chaîne d'origine dans _apply_filters."""
 
-        previous = combo.currentData()
+        id_map.clear()
 
-        combo.blockSignals(True)
+        items: List[Tuple[int, str]] = []
 
-        combo.clear()
+        for index, value in enumerate(values):
+            id_map[value] = index
+            items.append((index, value))
 
-        combo.addItem(
-            placeholder,
-            None
-        )
+        widget.set_items(items)
 
-        for label, value in options:
+    def _string_filter_selection(
+        self,
+        widget: MultiSelectFilter,
+        id_map: Dict[str, int],
+    ) -> Optional[set]:
+        """Retourne l'ensemble des valeurs (chaînes) sélectionnées, ou
+        None si aucun filtre n'est actif (tout coché)."""
 
-            combo.addItem(
-                label,
-                value
-            )
+        selected_ids = widget.selected_ids()
 
-        index = combo.findData(
-            previous
-        )
+        if selected_ids is None:
+            return None
 
-        combo.setCurrentIndex(
-            index if index >= 0 else 0
-        )
+        reverse = {v: k for k, v in id_map.items()}
 
-        combo.blockSignals(False)
+        return {reverse[i] for i in selected_ids if i in reverse}
 
 
     # =====================================================
@@ -555,65 +451,80 @@ class PlayByPlayPanel(QWidget):
 
     def _apply_filters(self):
 
-        team = self.team_filter.currentData()
+        selected_teams = self.team_filter.selected_ids()
+        selected_players = self.player_filter.selected_ids()
+        selected_events = self.event_filter.selected_ids()
 
-        player_id = self.player_filter.currentData()
-
-        event_type = self.event_filter.currentData()
-
-        phase = self.phase_filter.currentData()
-
-        system = self.system_filter.currentData()
-
-        action_type = self.action_type_filter.currentData()
+        selected_phases = self._string_filter_selection(
+            self.phase_filter, self._phase_ids
+        )
+        selected_systems = self._string_filter_selection(
+            self.system_filter, self._system_ids
+        )
+        selected_action_types = self._string_filter_selection(
+            self.action_type_filter, self._action_type_ids
+        )
 
         def matches_team(event: Event) -> bool:
 
-            if team is None:
+            if selected_teams is None:
                 return True
 
-            if team == "home":
-                return event.player_id in self._home_player_ids
+            is_home = event.player_id in self._home_player_ids
+            is_away = event.player_id in self._away_player_ids
 
-            if team == "away":
-                return event.player_id in self._away_player_ids
+            if TEAM_HOME in selected_teams and is_home:
+                return True
 
-            return True
+            if TEAM_AWAY in selected_teams and is_away:
+                return True
+
+            return False
+
+        def matches_player(event: Event) -> bool:
+
+            if selected_players is None:
+                return True
+
+            return event.player_id in selected_players
 
         def matches_event(event: Event) -> bool:
 
-            if event_type is None:
+            if selected_events is None:
                 return True
 
-            if event_type == SHOTS_MADE:
-                return (
-                    event.event_type in SHOT_TYPES
-                    and event.event_type.endswith("_MADE")
-                )
+            for value in selected_events:
 
-            if event_type == SHOTS_MISSED:
-                return (
-                    event.event_type in SHOT_TYPES
-                    and event.event_type.endswith("_MISSED")
-                )
+                if value == SHOTS_MADE:
+                    if event.event_type in SHOT_TYPES and event.event_type.endswith("_MADE"):
+                        return True
 
-            if event_type == SHOTS_ALL:
-                return event.event_type in SHOT_TYPES
+                elif value == SHOTS_MISSED:
+                    if event.event_type in SHOT_TYPES and event.event_type.endswith("_MISSED"):
+                        return True
 
-            if event_type == TURNOVERS_ALL:
-                return event.event_type.startswith("TO_") or event.event_type == "TURNOVER"
+                elif value == SHOTS_ALL:
+                    if event.event_type in SHOT_TYPES:
+                        return True
 
-            return event.event_type == event_type
+                elif value == TURNOVERS_ALL:
+                    if event.event_type.startswith("TO_") or event.event_type == "TURNOVER":
+                        return True
+
+                elif event.event_type == value:
+                    return True
+
+            return False
 
         self._events = [
             e
             for e in self._all_events
             if matches_team(e)
-            and (player_id is None or e.player_id == player_id)
+            and matches_player(e)
             and matches_event(e)
-            and (phase is None or e.phase == phase)
-            and (system is None or e.system == system)
-            and (action_type is None or e.action_type == action_type)
+            and (selected_phases is None or e.phase in selected_phases)
+            and (selected_systems is None or e.system in selected_systems)
+            and (selected_action_types is None or e.action_type in selected_action_types)
         ]
 
         self._render_table()
@@ -698,7 +609,9 @@ class PlayByPlayPanel(QWidget):
 
 
             # -------------------------
-            # Défense (éditable directement, pour les tirs de jeu)
+            # Défense (éditable directement, pour les tirs de jeu) :
+            # niveaux issus de data.event_config, modifiables via le menu
+            # Affichage > Configuration des événements.
             # -------------------------
 
             self.table.removeCellWidget(row, COL_DEFENSE)
@@ -761,10 +674,6 @@ class PlayByPlayPanel(QWidget):
                 dribbles_spin.setValue(event.dribbles or 0)
                 dribbles_spin.blockSignals(False)
 
-                # editingFinished (perte de focus / Entrée) plutôt que
-                # valueChanged, pour éviter de recharger tout le tableau à
-                # chaque clic sur les flèches (ce qui détruirait le widget
-                # en cours d'utilisation).
                 dribbles_spin.editingFinished.connect(
                     lambda e=event, s=dribbles_spin:
                     self.event_dribbles_changed.emit(e.id, s.value())
@@ -781,90 +690,43 @@ class PlayByPlayPanel(QWidget):
             # Bouton modifier
             # -------------------------
 
-            edit_btn = QPushButton(
-                "✏️"
-            )
+            edit_btn = QPushButton("✏️")
 
             edit_btn.clicked.connect(
                 lambda checked=False, e=event:
                 self.event_edit_requested.emit(e.id)
             )
 
-
             edit_widget = QWidget()
+            edit_layout = QHBoxLayout(edit_widget)
+            edit_layout.setContentsMargins(0, 0, 0, 0)
+            edit_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            edit_layout.addWidget(edit_btn)
 
-            edit_layout = QHBoxLayout(
-                edit_widget
-            )
-
-            edit_layout.setContentsMargins(
-                0,
-                0,
-                0,
-                0
-            )
-
-            edit_layout.setAlignment(
-                Qt.AlignmentFlag.AlignCenter
-            )
-
-            edit_layout.addWidget(
-                edit_btn
-            )
-
-
-            self.table.setCellWidget(
-                row,
-                COL_EDIT,
-                edit_widget
-            )
+            self.table.setCellWidget(row, COL_EDIT, edit_widget)
 
 
             # -------------------------
             # Bouton supprimer
             # -------------------------
 
-            delete_btn = QPushButton(
-                "🗑"
-            )
+            delete_btn = QPushButton("🗑")
 
             delete_btn.clicked.connect(
                 lambda checked=False, e=event:
                 self.event_deleted.emit(e.id)
             )
 
-
             delete_widget = QWidget()
+            delete_layout = QHBoxLayout(delete_widget)
+            delete_layout.setContentsMargins(0, 0, 0, 0)
+            delete_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            delete_layout.addWidget(delete_btn)
 
-            delete_layout = QHBoxLayout(
-                delete_widget
-            )
-
-            delete_layout.setContentsMargins(
-                0,
-                0,
-                0,
-                0
-            )
-
-            delete_layout.setAlignment(
-                Qt.AlignmentFlag.AlignCenter
-            )
-
-            delete_layout.addWidget(
-                delete_btn
-            )
-
-
-            self.table.setCellWidget(
-                row,
-                COL_DELETE,
-                delete_widget
-            )
+            self.table.setCellWidget(row, COL_DELETE, delete_widget)
 
 
         self.table.resizeColumnsToContents()
-
 
 
     def _on_double_click(
@@ -873,8 +735,6 @@ class PlayByPlayPanel(QWidget):
         column: int
     ):
 
-        # Ne pas déclencher le seek si le double-clic tombe sur un widget
-        # interactif (combo défense, spinbox dribbles, boutons).
         if column in (COL_DEFENSE, COL_DRIBBLES, COL_EDIT, COL_DELETE):
             return
 
