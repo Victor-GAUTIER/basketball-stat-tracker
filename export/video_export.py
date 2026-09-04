@@ -74,13 +74,20 @@ class VideoExportWorker(QObject):
     # =====================================================
 
     def _run_ffmpeg(self, cmd: List[str]):
-        """Lance une commande ffmpeg en gardant une référence au process,
-        pour permettre son annulation immédiate depuis cancel()."""
+        """Lance ffmpeg sans ouvrir de fenêtre console sous Windows."""
+
+        startupinfo = None
+        creationflags = 0
+
+        if os.name == "nt":
+            creationflags = subprocess.CREATE_NO_WINDOW
 
         process = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
+            startupinfo=startupinfo,
+            creationflags=creationflags,
         )
 
         self._current_process = process
