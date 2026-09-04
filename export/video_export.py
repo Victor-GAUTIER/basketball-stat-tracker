@@ -5,7 +5,7 @@ import subprocess
 import tempfile
 from typing import Dict, List, Optional, Union
 
-from PySide6.QtCore import QObject, QThread, Signal
+from PySide6.QtCore import QObject, Signal
 
 from data.models import Event
 from data.ffmpeg_path import get_ffmpeg_path
@@ -13,9 +13,10 @@ from data.ffmpeg_path import get_ffmpeg_path
 
 class VideoExportWorker(QObject):
 
-    progress = Signal(int, int)   # (segment_courant, total)
-    finished = Signal(str)        # chemin du fichier de sortie
+    progress = Signal(int, int)
+    finished = Signal(str)
     error = Signal(str)
+    cancelled = Signal()
 
     def __init__(
         self,
@@ -37,45 +38,33 @@ class VideoExportWorker(QObject):
         self.after = after
         self.output_path = output_path
         self._cancelled = False
-
-        # Référence vers le process ffmpeg actuellement en cours
-        # d'exécution, pour pouvoir le tuer immédiatement depuis cancel()
-        # plutôt que d'attendre qu'il se termine de lui-même.
+        self._cancel_signal_emitted = False
         self._current_process: Optional[subprocess.Popen] = None
 
-    # =====================================================
-    # Résolution du chemin vidéo pour un événement donné
-    # =====================================================
+    def _emit_cancelled(self):
+        if not self._cancel_signal_emitted:
+            self._cancel_signal_emitted = True
+            self.cancelled.emit()
 
     def _video_path_for(self, event: Event) -> Optional[str]:
-
         game_id = getattr(event, "game_id", None)
-
         if game_id in self.video_paths:
             return self.video_paths[game_id]
-
         if len(self.video_paths) == 1:
             return next(iter(self.video_paths.values()))
-
         return None
-
-    # =====================================================
-    # Annulation
-    # =====================================================
 
     def cancel(self):
         self._cancelled = True
 
-        if self._current_process is not None:
-            self._current_process.kill()
-
-    # =====================================================
-    # Exécution d'une commande ffmpeg (avec suivi du process en cours)
-    # =====================================================
+        process = self._current_process
+        if process is not None and process.poll() is None:
+            try:
+                process.kill()
+            except ProcessLookupError:
+                pass
 
     def _run_ffmpeg(self, cmd: List[str]):
-        """Lance ffmpeg sans ouvrir de fenêtre console sous Windows."""
-
         startupinfo = None
         creationflags = 0
 
@@ -91,33 +80,20 @@ class VideoExportWorker(QObject):
         )
 
         self._current_process = process
-
         stdout, stderr = process.communicate()
-
         self._current_process = None
 
         return process.returncode, stdout, stderr
 
-    # =====================================================
-    # Point d'entrée
-    # =====================================================
-
     def run(self):
         try:
             with tempfile.TemporaryDirectory() as tmp_dir:
-
                 segment_paths = []
                 total = len(self.events)
 
-                # -------------------------
-                # 1. Découpe de chaque segment (frame rate constant,
-                #    ré-échantillonnage audio forcé, pour limiter la
-                #    dérive audio/vidéo à la source).
-                # -------------------------
-
                 for i, event in enumerate(self.events, start=1):
-
                     if self._cancelled:
+                        self._emit_cancelled()
                         return
 
                     video_path = self._video_path_for(event)
@@ -131,8 +107,10 @@ class VideoExportWorker(QObject):
 
                     start = max(0.0, event.timestamp - self.before)
                     duration = self.before + self.after
-
-                    segment_path = os.path.join(tmp_dir, f"seg_{i:04d}.mp4")
+                    segment_path = os.path.join(
+                        tmp_dir,
+                        f"seg_{i:04d}.mp4"
+                    )
 
                     cmd = [
                         get_ffmpeg_path(),
@@ -155,13 +133,16 @@ class VideoExportWorker(QObject):
                     returncode, stdout, stderr = self._run_ffmpeg(cmd)
 
                     if self._cancelled:
+                        self._emit_cancelled()
                         return
 
                     if returncode != 0:
                         self.error.emit(
-                            f"Erreur ffmpeg sur le segment {i} "
-                            f"(t={event.timestamp:.1f}s) :\n"
-                            f"{stderr.decode(errors='ignore')}"
+                            stderr.decode(
+                                "utf-8",
+                                errors="replace"
+                            ).strip()
+                            or f"FFmpeg a échoué pour le segment {i}."
                         )
                         return
 
@@ -169,17 +150,8 @@ class VideoExportWorker(QObject):
                     self.progress.emit(i, total)
 
                 if self._cancelled:
+                    self._emit_cancelled()
                     return
-
-                # -------------------------
-                # 2. Concaténation via le filtre concat, avec
-                #    normalisation préalable de chaque segment (résolution,
-                #    SAR, fps) : les vidéos sources peuvent provenir de
-                #    caméras/exports différents selon les matchs (ex.
-                #    1920x1080/30fps vs 854x480/29.97fps), et le filtre
-                #    concat exige que tous les flux d'entrée aient
-                #    exactement les mêmes paramètres.
-                # -------------------------
 
                 concat_cmd = [get_ffmpeg_path(), "-y"]
 
@@ -187,7 +159,6 @@ class VideoExportWorker(QObject):
                     concat_cmd += ["-i", path]
 
                 n = len(segment_paths)
-
                 TARGET_W = 1920
                 TARGET_H = 1080
                 TARGET_FPS = 30
@@ -205,10 +176,15 @@ class VideoExportWorker(QObject):
                     for i in range(n)
                 )
 
-                concat_inputs = "".join(f"[v{i}][a{i}]" for i in range(n))
+                concat_inputs = "".join(
+                    f"[v{i}][a{i}]"
+                    for i in range(n)
+                )
 
                 filter_complex = (
-                    f"{filter_parts}{concat_inputs}concat=n={n}:v=1:a=1[outv][outa]"
+                    f"{filter_parts}"
+                    f"{concat_inputs}"
+                    f"concat=n={n}:v=1:a=1[outv][outa]"
                 )
 
                 concat_cmd += [
@@ -224,17 +200,23 @@ class VideoExportWorker(QObject):
                 returncode, stdout, stderr = self._run_ffmpeg(concat_cmd)
 
                 if self._cancelled:
+                    self._emit_cancelled()
                     return
 
                 if returncode != 0:
                     self.error.emit(
-                        "Erreur ffmpeg lors de la concaténation :\n"
-                        f"{stderr.decode(errors='ignore')}"
+                        stderr.decode(
+                            "utf-8",
+                            errors="replace"
+                        ).strip()
+                        or "FFmpeg a échoué lors de l'assemblage du montage."
                     )
                     return
 
                 self.finished.emit(self.output_path)
 
         except Exception as exc:
-            if not self._cancelled:
+            if self._cancelled:
+                self._emit_cancelled()
+            else:
                 self.error.emit(str(exc))

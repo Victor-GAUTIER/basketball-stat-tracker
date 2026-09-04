@@ -2306,7 +2306,6 @@ class AnalysisWindow(QMainWindow):
     # =====================================================
 
     def _on_export_video_requested(self, events, before, after):
-
         if not events:
             return
 
@@ -2328,6 +2327,8 @@ class AnalysisWindow(QMainWindow):
         if not output_path:
             return
 
+        self._export_cancel_requested = False
+
         self._export_thread = QThread(self)
         self._export_worker = VideoExportWorker(
             video_path=self.video_path,
@@ -2339,9 +2340,17 @@ class AnalysisWindow(QMainWindow):
         self._export_worker.moveToThread(self._export_thread)
 
         self._export_progress_dialog = QProgressDialog(
-            "Export du montage en cours...", "Annuler", 0, len(events), self
+            "Export du montage en cours...",
+            None,  # On désactive le bouton Annuler automatique de Qt pour éviter le double-close
+            0,
+            len(events),
+            self
         )
+        # On remet un bouton d'annulation explicitement géré
+        self._export_progress_dialog.setCancelButtonText("Annuler")
         self._export_progress_dialog.setWindowModality(Qt.WindowModal)
+        self._export_progress_dialog.setAutoClose(False)
+        self._export_progress_dialog.setAutoReset(False)
 
         self._export_thread.started.connect(self._export_worker.run)
 
@@ -2353,35 +2362,72 @@ class AnalysisWindow(QMainWindow):
         self._export_worker.finished.connect(self._on_export_video_finished)
         self._export_worker.error.connect(self._on_export_video_error)
 
+        # On utilise une connexion QueuedConnection pour défaire l'interaction directe pendant le signal
         self._export_progress_dialog.canceled.connect(
-            self._export_worker.cancel
-        )
-        self._export_progress_dialog.canceled.connect(
-            self._export_progress_dialog.close
+            self._on_export_cancel_requested,
+            Qt.ConnectionType.QueuedConnection
         )
 
         self._export_worker.finished.connect(self._export_thread.quit)
         self._export_worker.error.connect(self._export_thread.quit)
+        self._export_worker.cancelled.connect(
+            self._export_thread.quit,
+            Qt.ConnectionType.QueuedConnection
+        )
+        self._export_worker.cancelled.connect(
+            self._on_export_video_cancelled,
+            Qt.ConnectionType.QueuedConnection
+        )
 
+        self._export_progress_dialog.show()
         self._export_thread.start()
 
-    def _on_export_video_finished(self, output_path):
+    def _on_export_cancel_requested(self):
+        if getattr(self, "_export_cancel_requested", False):
+            return
 
-        self._export_progress_dialog.close()
+        self._export_cancel_requested = True
+
+        if self._export_worker is not None:
+            self._export_worker.cancel()
+
+    def _on_export_video_finished(self, output_path: str) -> None:
+        """Appelé quand l'export vidéo s'est terminé avec succès."""
+        if hasattr(self, "_export_progress_dialog") and self._export_progress_dialog:
+            self._export_progress_dialog.close()
 
         QMessageBox.information(
             self,
             "Export terminé",
-            f"Montage enregistré :\n{output_path}"
+            f"Le montage vidéo a été exporté avec succès :\n{output_path}"
         )
 
-    def _on_export_progress(self, done, total):
+    def _on_export_video_cancelled(self):
+        if self._export_progress_dialog is not None:
+            self._export_progress_dialog.blockSignals(True)
+            self._export_progress_dialog.close()
+            self._export_progress_dialog = None
 
+        self._export_worker = None
+        self._export_thread = None
+
+        self.statusBar().showMessage("Export vidéo annulé.", 3000)
+
+    def _on_export_progress(self, done, total):
+        # Ignorer toute mise à jour si l'annulation a été demandée
+        if getattr(self, "_export_cancel_requested", False):
+            return
+
+        if self._export_progress_dialog is None:
+            return
+
+        self._export_progress_dialog.setMaximum(total)
         self._export_progress_dialog.setValue(done)
 
     def _on_export_video_error(self, message):
 
-        self._export_progress_dialog.close()
+        if self._export_progress_dialog is not None:
+            self._export_progress_dialog.close()
 
         QMessageBox.critical(
             self,

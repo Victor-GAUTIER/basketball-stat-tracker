@@ -2349,11 +2349,33 @@ class TeamAnalysisWindow(QMainWindow):
         )
         self._export_worker.finished.connect(self._on_team_export_finished)
         self._export_worker.error.connect(self._on_team_export_error)
-        self._export_progress_dialog.canceled.connect(self._export_worker.cancel)
+
+        # Gestion propre de l'annulation
+        self._export_progress_dialog.canceled.connect(self._on_export_canceled)
+
         self._export_worker.finished.connect(self._export_thread.quit)
         self._export_worker.error.connect(self._export_thread.quit)
 
         self._export_thread.start()
+
+    def _on_export_canceled(self) -> None:
+        """Arrête le worker et ferme le thread immédiatement lors d'une annulation."""
+        if hasattr(self, "_export_worker") and self._export_worker:
+            # On déconnecte les signaux pour éviter de repasser dans finished/error
+            try:
+                self._export_worker.finished.disconnect()
+                self._export_worker.error.disconnect()
+            except (RuntimeError, TypeError):
+                pass
+
+            self._export_worker.cancel()
+
+        if hasattr(self, "_export_thread") and self._export_thread.isRunning():
+            self._export_thread.quit()
+            self._export_thread.wait()
+
+        if hasattr(self, "_export_progress_dialog"):
+            self._export_progress_dialog.close()
 
     def _on_team_export_progress(self, done, total) -> None:
         self._export_progress_dialog.setValue(done)
