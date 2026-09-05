@@ -46,17 +46,30 @@ from ui.analysis.play_by_play_panel import (
 TEAM_COLOR = QColor("#297ffe")
 OPPONENT_COLOR = QColor("#b0b0b0")
 
+# Valeurs spéciales pour le filtre "Équipe" (MultiSelectFilter attend des
+# ids entiers). Un événement est "mon équipe" si son player_id figure dans
+# _team_player_ids, "adversaire" sinon — peu importe l'identité précise de
+# l'adversaire rencontré ce jour-là, puisqu'on agrège plusieurs matchs.
+TEAM_MINE = -1
+TEAM_OPPONENT = -2
+
 
 class TeamPlayByPlayEvent:
     """Associe un événement à son match d'origine (libellé affiché dans la
-    colonne "Match", et clé de regroupement pour l'export vidéo)."""
+    colonne "Match", et clé de regroupement pour l'export vidéo).
 
-    __slots__ = ("event", "game_id", "game_label")
+    `order` conserve la position chronologique d'origine (avant tout tri
+    d'affichage), pour que l'export vidéo puisse toujours reconstituer un
+    montage du plus ancien au plus récent, indépendamment de l'ordre
+    d'affichage ou de sélection dans le tableau."""
+
+    __slots__ = ("event", "game_id", "game_label", "order")
 
     def __init__(self, event: Event, game_id: int, game_label: str) -> None:
         self.event = event
         self.game_id = game_id
         self.game_label = game_label
+        self.order = 0
 
 
 class TeamPlayByPlayPanel(QWidget):
@@ -80,6 +93,13 @@ class TeamPlayByPlayPanel(QWidget):
         self.match_filter = MultiSelectFilter("Matchs", [], self)
         self.match_filter.on_change = self._apply_filters
 
+        self.team_filter = MultiSelectFilter("Équipe", [], self)
+        self.team_filter.on_change = self._apply_filters
+        self.team_filter.set_items([
+            (TEAM_MINE, "Mon équipe"),
+            (TEAM_OPPONENT, "Adversaires"),
+        ])
+
         self.player_filter = QComboBox(self)
         self.event_filter = QComboBox(self)
         self.phase_filter = QComboBox(self)
@@ -98,6 +118,8 @@ class TeamPlayByPlayPanel(QWidget):
         filters_row_1 = QHBoxLayout()
         filters_row_1.addWidget(QLabel("Matchs :"))
         filters_row_1.addWidget(self.match_filter)
+        filters_row_1.addWidget(QLabel("Équipe :"))
+        filters_row_1.addWidget(self.team_filter)
         filters_row_1.addWidget(QLabel("Joueuse :"))
         filters_row_1.addWidget(self.player_filter)
         filters_row_1.addStretch()
@@ -185,7 +207,16 @@ class TeamPlayByPlayPanel(QWidget):
         games: List[Tuple[int, str]],
     ) -> None:
         """`games` : liste (game_id, libellé), dans l'ordre d'affichage
-        souhaité pour le filtre "Matchs"."""
+        souhaité pour le filtre "Matchs".
+
+        `items` est attendu trié chronologiquement (du plus ancien au plus
+        récent) : on fixe `order` sur cette base AVANT d'inverser pour
+        l'affichage, afin que l'export vidéo puisse toujours reconstituer
+        l'ordre chronologique d'origine, quel que soit l'ordre
+        d'affichage ou de sélection dans le tableau."""
+
+        for index, item in enumerate(items):
+            item.order = index
 
         self._all_items = list(reversed(items))
         self._players = players
@@ -273,11 +304,27 @@ class TeamPlayByPlayPanel(QWidget):
     def _apply_filters(self) -> None:
 
         game_ids = self.match_filter.selected_ids()
+        selected_teams = self.team_filter.selected_ids()
         player_id = self.player_filter.currentData()
         event_type = self.event_filter.currentData()
         phase = self.phase_filter.currentData()
         system = self.system_filter.currentData()
         action_type = self.action_type_filter.currentData()
+
+        def matches_team(event: Event) -> bool:
+
+            if selected_teams is None:
+                return True
+
+            is_mine = event.player_id in self._team_player_ids
+
+            if TEAM_MINE in selected_teams and is_mine:
+                return True
+
+            if TEAM_OPPONENT in selected_teams and not is_mine:
+                return True
+
+            return False
 
         def matches_event(event: Event) -> bool:
 
@@ -297,6 +344,7 @@ class TeamPlayByPlayPanel(QWidget):
             it
             for it in self._all_items
             if (game_ids is None or it.game_id in game_ids)
+            and matches_team(it.event)
             and (player_id is None or it.event.player_id == player_id)
             and matches_event(it.event)
             and (phase is None or it.event.phase == phase)
@@ -367,4 +415,11 @@ class TeamPlayByPlayPanel(QWidget):
         before = self.export_before_spin.value()
         after = self.export_after_spin.value()
 
-        self.export_requested.emit([it.event for it in self._items], before, after)
+        # Le tableau affiche les événements du plus récent au plus ancien,
+        # mais le montage vidéo doit toujours suivre l'ordre chronologique
+        # réel, quel que soit l'ordre d'affichage/sélection courant.
+        chronological_items = sorted(self._items, key=lambda it: it.order)
+
+        self.export_requested.emit(
+            [it.event for it in chronological_items], before, after
+        )

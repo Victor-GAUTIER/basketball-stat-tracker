@@ -754,8 +754,10 @@ class PlayByPlayPanel(QWidget):
         before = self.export_before_spin.value()
         after = self.export_after_spin.value()
 
+        chronological_events = sorted(self._events, key=lambda e: e.timestamp)
+
         self.export_requested.emit(
-            list(self._events),
+            chronological_events,
             before,
             after
         )
